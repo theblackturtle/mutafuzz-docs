@@ -1,0 +1,230 @@
+---
+title: "Quick Start"
+description: "Your first fuzzing session in 5 minutes"
+icon: "play"
+---
+
+## Overview
+
+This guide walks you through a complete fuzzing workflow: selecting a target, writing a simple script, analyzing results, and exporting findings.
+
+<Tip>
+This quickstart uses **Single Request** mode, the most common fuzzing workflow. See [Usage Modes](/modes/index) for other options.
+</Tip>
+
+## Step 1: Select Your Target
+
+### Choose a Request to Fuzz
+
+1. Browse your target application through Burp's proxy
+2. Navigate to **Proxy > HTTP history**
+3. Locate the request you want to fuzz (e.g., search endpoint, API call)
+4. In the HTTP editor, **select the parameter value** you want to replace with fuzzing payloads
+5. Right-click and select **Extensions > MutaFuzz > Open MutaFuzz**
+
+<Note>
+Keyboard shortcut: <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>5</kbd>
+</Note>
+
+<img src="/images/quickstart-select-request.png" alt="Selecting request in HTTP history" />
+
+The fuzzer panel opens with your request loaded. MutaFuzz automatically converts your selection into a `%s` placeholder:
+
+**Original request:**
+```http
+GET /search?q=test&page=1 HTTP/1.1
+Host: example.com
+```
+
+**Converted template:**
+```http
+GET /search?q=%s&page=1 HTTP/1.1
+Host: example.com
+```
+
+### Adding Markers Manually
+
+You can also insert `%s` placeholders directly in the template editor to define multiple fuzzing positions:
+
+```http
+GET /api/user/%s/profile?format=%s HTTP/1.1
+```
+
+<Tip>
+Multiple `%s` placeholders enable multi-position fuzzing. By default, MutaFuzz uses Cartesian product mode (equivalent to Burp Intruder's cluster bomb attack).
+</Tip>
+
+## Step 2: Configure Wordlists
+
+Each Wordlist panel has three tabs for loading payloads:
+
+### Payloads Tab
+Paste or type payloads directly (one per line):
+
+<img src="/images/quickstart-wordlist-payloads-tab.png" alt="Configuring Payloads Tab" />
+
+### Most Used Tab
+Select from your frequently used wordlist files. Files used from the Directory tab are automatically tracked and appear here.
+
+<img src="/images/quickstart-wordlist-most-used-tab.png" alt="Configuring Most Used Tab" />
+
+### Directory Tab
+Browse and select wordlist files from your filesystem. Supports multi-selection.
+
+<img src="/images/quickstart-wordlist-directory-tab.png" alt="Configuring Directory Tab" />
+
+<Note>
+When you start fuzzing, payloads are loaded from the currently selected tab (Payloads/Most Used/Directory). For example, if Wordlist 1 has files selected in the Directory tab, then `payloads.wordlist(1)` reads the file contents, splits them into lines, and yields each line as a payload.
+
+Your tab selection is saved between sessions.
+</Note>
+
+### Multiple Wordlists
+
+For multiple `%s` markers:
+- **Wordlist 1** → First position
+- **Wordlist 2** → Second position
+- **Wordlist 3** → Third position
+
+By default, MutaFuzz uses Cartesian product mode, which tests all possible combinations of payloads across positions (equivalent to Burp Intruder's "Cluster Bomb" attack type).
+
+## Step 3: Select Fuzzing Script
+
+### Choose Script
+
+In the **Script** dropdown:
+
+1. Select `000_default.py` (recommended for first run)
+2. Review the script in the editor below
+<img src="/images/quickstart-script.png" alt="Configuring Script" />
+
+**What the default script does:**
+- Calibration phase with learn mode (filters noise)
+- Queues payloads from your wordlists
+- Filters responses to show only interesting ones
+
+```python
+@filter.interesting()
+def handle_response(req):
+    """Only show responses marked interesting by learn mode"""
+    table.add(req)
+
+def queue_tasks():
+    # Calibration (learn mode groups 1-5)
+    for i in range(6, 12, 3):
+        random = utils.randstr(length=i)
+        fuzz.payloads([random]).learn_group(1).queue()
+
+    # Main fuzzing with your wordlist
+    for payload in payloads.wordlist(1):
+        fuzz.payloads([payload]).queue()
+
+    fuzz.done()
+```
+
+<Note>
+Learn mode calibration sends random payloads first to establish baseline responses. Only responses that differ will appear in results.
+</Note>
+
+### Script Options
+
+You can modify the script directly:
+
+**Disable learn mode:**
+```python
+@filter.status([200])  # Replace @filter.interesting()
+def handle_response(req):
+    table.add(req)
+```
+
+**Add custom filters:**
+```python
+@filter.status([200])           # Only show 200 OK responses
+@filter.contains("admin", "panel")  # Response body must contain these words
+def handle_response(req):
+    table.add(req)
+```
+
+## Step 4: Start Fuzzing
+
+### Launch Fuzzer
+
+1. Review your configuration:
+   - Template request with `%s` placeholders
+   - Wordlist payloads loaded
+   - Script selected
+2. Click **Start** button
+
+## Step 5: Analyze Results
+
+### Request Table
+
+Results appear in the **Request Table**:
+
+<img src="/images/quickstart-results-table.png" alt="Results table with interesting findings" />
+
+Click any row to view:
+- **Request tab**: Full HTTP request sent
+- **Response tab**: Complete HTTP response
+
+## Step 6: Refine Results
+
+### Apply Additional Filters
+
+Use the filter bar above the table with advanced filter expressions:
+
+```text
+Response.Status == 200
+Response.ContentLength >= 4000 AND Response.ContentLength <= 5000
+Response.Body CONTAINS "admin panel"
+Response.Status == 200 AND Response.ContentLength > 4000
+```
+<img src="/images/quickstart-results-table-filter.png" alt="Results table with filter expressions" />
+<Card title="Complete Filter Syntax" icon="filter" href="/request-table/filtering">
+  Learn about operators, regex matching, custom columns, and 50+ filter patterns
+</Card>
+
+### Ignore False Positives
+
+Right-click unwanted results and select **Ignore Requests** (or press <kbd>Ctrl</kbd> + <kbd>I</kbd>):
+- **Smart fingerprinting**: Analyzes 15+ response attributes to create a unique fingerprint
+- **Auto-remove similar responses**: Automatically removes matching requests from the table
+- **Global fingerprint storage**: Once ignored, similar response fingerprints won't appear in future results
+
+**Example**: Select a 404 error page → Ignore Requests → All similar 404 pages automatically disappear from your results.
+
+<img src="/images/quickstart-ignore-requests.png" alt="Results table ignore requests" />
+
+<Card title="Complete Ignore Requests Guide" icon="eye-slash" href="/request-table/ignore-requests">
+  Learn about fingerprinting, pattern storage, and advanced filtering techniques
+</Card>
+
+<Warning>
+Ignored requests are permanently removed from the table and cannot be restored.
+</Warning>
+
+## Step 7: Export Results
+
+Right-click interesting rows:
+- **Copy URL**: Copy URL to clipboard
+- **Copy response body**: Copy full response
+- **Add to Target Site Map**: Add to Burp's target scope
+
+## Next Steps
+
+Congratulations! You've completed your first fuzzing session. Now explore advanced features:
+
+<CardGroup cols={2}>
+  <Card title="Learn Mode Deep Dive" icon="brain" href="/scripting/learn-mode">
+    Master intelligent response filtering
+  </Card>
+  <Card title="Python Scripting" icon="code" href="/scripting">
+    Write custom fuzzing scripts
+  </Card>
+  <Card title="Request Table" icon="table" href="/request-table">
+    Advanced filtering and custom columns
+  </Card>
+  <Card title="Dashboard" icon="grid-2" href="/dashboard">
+    Manage multiple fuzzing sessions
+  </Card>
+</CardGroup>

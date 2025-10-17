@@ -1,0 +1,145 @@
+---
+title: Multiple Requests
+description: Accept list of HTTP requests from Proxy History, Logger, Target, etc.
+sidebarTitle: Multiple Requests
+icon: "list-check"
+---
+
+# Multiple Requests
+
+Import multiple raw HTTP requests from Proxy History, Logger, or Target and fuzz them all at once. This mode is best for batch testing and analyzing application flows.
+
+## How to Use
+
+1. Navigate to **Proxy → HTTP history** tab (or Logger, Target, etc.)
+2. Select multiple requests (<kbd>Ctrl</kbd> + **Click** or <kbd>Shift</kbd> + **Click**)
+3. Right-click → "Send requests to MutaFuzz"
+4. All requests loaded in table view
+
+## Important Notes
+
+<Warning>
+**Exception Handling**: Python's `except Exception:` doesn't catch Java exceptions wrapped in Jython when working with Burp API objects like `request` and `params`.
+
+Always use bare `except:` instead:
+
+```python
+try:
+    all_params = request.parameters()
+    for param in all_params:
+        # Process parameters
+        pass
+except:  # Use bare except, not 'except Exception:'
+    pass
+```
+
+</Warning>
+
+<Warning>
+**Parameter Encoding**: When adding or updating parameter values, you must manually URL-encode the values. Burp's Montoya API doesn't handle encoding automatically.
+
+```python
+# Manual encoding required
+PAYLOAD = encode.url("xsstest'\"<>\\")
+
+# Use encoded payload
+modified_req = request.withUpdatedParameters(
+    HttpParameter.parameter(param.name(), PAYLOAD, param.type())
+)
+```
+
+This is a known limitation: [burp-extensions-montoya-api#103](https://github.com/PortSwigger/burp-extensions-montoya-api/issues/103)
+</Warning>
+
+## Example: Send All Requests
+
+Send all loaded requests without modification:
+
+```python
+# Iterate through all templates from context menu
+for req_resp in templates.all():
+    fuzz.http_request(req_resp.request()).queue()
+
+fuzz.done()
+```
+
+<Info>
+`templates.all()` returns all requests sent via "Send to MutaFuzz" context menu.
+</Info>
+
+## Example: Modify Requests Before Sending
+
+Add custom headers or modify requests:
+
+```python
+for req_resp in templates.all():
+    req = req_resp.request()
+
+    # Add custom header using Burp API
+    req = req.withHeader("X-Custom-Header", "test")
+
+    # Update parameter using Burp API
+    req = req.withUpdatedParameters([
+        utils.http_parameter("id", "999", "PARAM_URL")
+    ])
+
+    fuzz.http_request(req).queue()
+
+fuzz.done()
+```
+
+## Example: Filter and Fuzz Specific Endpoints
+
+Only fuzz endpoints matching criteria:
+
+```python
+for req_resp in templates.all():
+    url = req_resp.request().url()
+
+    # Skip non-API endpoints
+    if "/api/" not in url:
+        continue
+
+    # Skip OPTIONS requests
+    if req_resp.request().method() == "OPTIONS":
+        continue
+
+    fuzz.http_request(req_resp.request()).queue()
+
+fuzz.done()
+```
+
+## Example: Response Analysis
+
+Add custom response handling:
+
+```python
+@filter.interesting()
+def handle_response(req):
+    # Access response properties
+    status = req.status
+    length = req.length
+    body = req.response
+
+    # Add to table with custom note
+    if status == 200 and length > 10000:
+        table.add(req)
+```
+
+## When to Use
+
+- Testing multiple endpoints at once
+- Analyzing entire application flow
+- Comparing responses across requests
+- Batch testing from Proxy History
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Empty Panel" href="/modes/empty-panel" icon="code">
+    Build requests programmatically
+  </Card>
+  <Card title="Dashboard" href="/dashboard" icon="grid">
+    Manage multiple fuzzers
+  </Card>
+</CardGroup>

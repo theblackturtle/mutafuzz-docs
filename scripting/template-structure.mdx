@@ -1,0 +1,549 @@
+---
+title: Template Structure
+description: Anatomy of a MutaFuzz Python script - lifecycle hooks, required functions, and best practices
+keywords: [template, structure, lifecycle, queue_tasks, handle_response, onStop, functions]
+icon: "diagram-project"
+---
+
+# Template Structure
+
+Every MutaFuzz script follows a standard structure with two required functions and optional lifecycle hooks.
+
+## Minimal Template
+
+The simplest working script:
+
+```python
+def queue_tasks():
+    """Queue fuzzing tasks - runs once at start."""
+    fuzz.url("https://example.com").queue()
+    fuzz.done()
+
+def handle_response(req):
+    """Process responses - runs once per response."""
+    table.add(req)
+```
+
+That's it. Two functions, clean and simple.
+
+## Complete Template
+
+A production-ready script with all features:
+
+```python
+"""
+Script Title - Brief description
+
+Detailed explanation of what this script does, including:
+- Input requirements (wordlists, templates, etc.)
+- Expected output
+- Use cases
+"""
+
+# Configuration constants
+CONFIG_VALUE = True
+PAYLOAD_PREFIX = "admin_"
+
+# Optional: Import Java classes for advanced features
+from burp.api.montoya.http.message.params import HttpParameter, HttpParameterType
+
+# ============================================================================
+# LIFECYCLE HOOKS
+# ============================================================================
+
+def queue_tasks():
+    """
+    Phase 1: Queue all fuzzing requests.
+
+    Runs ONCE when user clicks "Start". Generate and queue all tasks here.
+    Use .queue() for async execution, .send() for sync chaining.
+
+    Required: Must call fuzz.done() at end.
+    """
+    # Your queuing logic here
+    for payload in payloads.wordlist(1):
+        fuzz.url(f"https://example.com/{payload}").queue()
+
+    fuzz.done()  # Required - signals no more tasks
+
+
+def handle_response(req):
+    """
+    Phase 2: Process each completed response.
+
+    Runs MANY TIMES (once per response). Filter responses with decorators
+    before handler executes.
+
+    Args:
+        req (RequestObject): Completed request/response with properties:
+            - req.status (int): HTTP status code
+            - req.length (int): Response body length in bytes
+            - req.text (str): Response body as string
+            - req.body (str): Response body as string
+            - req.interesting (bool): Learn mode flagged as interesting
+            - req.url (str): Request URL
+            - req.method (str): HTTP method
+            - req.headers (List[HttpHeader]): Response headers (use req.header(name) helper)
+    """
+    # Your processing logic here
+    table.add(req)
+
+
+def onStop():
+    """
+    Phase 3: Cleanup after script stops.
+
+    Runs ONCE when fuzzing stops (user clicks "Stop" or queue completes).
+    Optional - implement only if cleanup needed.
+
+    Use cases:
+    - Close file handles
+    - Log final statistics
+    - Clean up session state
+    """
+    # Your cleanup logic here
+    session.clear()
+
+# ============================================================================
+# HELPER FUNCTIONS (optional)
+# ============================================================================
+
+def extract_token(body):
+    """Extract authentication token from response body."""
+    import re
+    match = re.search(r'"token":\s*"([^"]+)"', body)
+    return match.group(1) if match else None
+
+
+def build_payload(base, suffix):
+    """Build payload with encoding transformations."""
+    return encode.url(base + suffix)
+
+# ============================================================================
+# RESPONSE FILTERS (optional)
+# ============================================================================
+
+# Uncomment and stack decorators to filter responses:
+# @filter.status([200, 201, 202])       # Include only these status codes
+# @filter.status_not([404, 500])        # Exclude these status codes
+# @filter.interesting()                 # Include only learn mode flagged responses
+# @filter.length_range(min=1000)        # Minimum response length
+# @filter.length_range(max=5000)        # Maximum response length
+# @filter.contains("admin", "panel")    # Body must contain all keywords
+# @filter.matches(r"error|warning")     # Body must match regex
+def handle_response(req):
+    """Process filtered responses."""
+    table.add(req)
+```
+
+## Function Reference
+
+### `queue_tasks()` - Required
+
+**Purpose:** Generate and queue all fuzzing requests.
+
+**Execution:** Runs **once** when user clicks "Start".
+
+**Must call:** `fuzz.done()` at end to signal completion.
+
+```python
+def queue_tasks():
+    # Queue requests with .queue() (async)
+    for url in payloads.wordlist(1):
+        fuzz.url(url).queue()
+
+    # Or send with .send() (sync)
+    resp = fuzz.url("https://example.com").send()
+    token = extract_token(resp.body)
+
+    # Always signal done
+    fuzz.done()
+```
+
+**Common patterns:**
+
+<Tabs>
+  <Tab title="Simple fuzzing">
+    ```python
+    def queue_tasks():
+        """Fuzz wordlist against URL."""
+        for payload in payloads.wordlist(1):
+            fuzz.url(f"https://example.com/{payload}").queue()
+        fuzz.done()
+    ```
+  </Tab>
+
+  <Tab title="With learn mode">
+    ```python
+    def queue_tasks():
+        """Calibrate then fuzz."""
+        # Calibration phase
+        for i in range(5):
+            payload = utils.randstr(8)
+            fuzz.payloads([payload]).learn_group(i + 1).queue()
+
+        # Fuzzing phase
+        for payload in payloads.wordlist(1):
+            fuzz.payloads([payload]).queue()
+
+        fuzz.done()
+    ```
+  </Tab>
+
+  <Tab title="Request chaining">
+    ```python
+    def queue_tasks():
+        """Chain requests with .send()."""
+        # Step 1: Get token
+        resp1 = fuzz.url("https://example.com/auth").send()
+        token = extract_token(resp1.body)
+
+        # Step 2: Use token
+        req2 = utils.http_request_from_url("https://example.com/api")
+        req2 = req2.withHeader("Authorization", f"Bearer {token}")
+        resp2 = fuzz.http_request(req2).send()
+
+        table.add(resp2)
+        fuzz.done()
+    ```
+  </Tab>
+
+  <Tab title="Multiple Requests mode">
+    ```python
+    def queue_tasks():
+        """Send all templates from context menu."""
+        for req_resp in templates.all():
+            fuzz.http_request(req_resp.request()).queue()
+        fuzz.done()
+    ```
+  </Tab>
+</Tabs>
+
+### `handle_response(req)` - Required
+
+**Purpose:** Process each completed HTTP response.
+
+**Execution:** Runs **many times** (once per response that passes filters).
+
+**Parameters:**
+- `req` (`RequestObject`): Completed request/response
+
+**Returns:** None (use `table.add()` to show in UI)
+
+```python
+@filter.interesting()
+def handle_response(req):
+    """Process interesting responses."""
+    # Access response properties
+    if req.status == 200 and req.length > 1000:
+        table.add(req)
+
+    # Store state for multi-step workflows
+    if "token" in req.text:
+        session.set("auth_token", extract_token(req.body))
+```
+
+**Common patterns:**
+
+<Tabs>
+  <Tab title="Simple filtering">
+    ```python
+    @filter.status([200, 201])
+    def handle_response(req):
+        """Add successful responses to table."""
+        table.add(req)
+    ```
+  </Tab>
+
+  <Tab title="Conditional logic">
+    ```python
+    def handle_response(req):
+        """Complex filtering logic."""
+        if req.status == 200:
+            if "admin" in req.text.lower():
+                table.add(req)
+        elif req.status >= 500:
+            # Log server errors
+            print_err("Server error: {} -> {}".format(req.url, req.status))
+    ```
+  </Tab>
+
+  <Tab title="State extraction">
+    ```python
+    def handle_response(req):
+        """Extract and store tokens for later use."""
+        import json
+
+        if req.status == 200 and "token" in req.text:
+            data = json.loads(req.body)
+            token = data.get("token")
+            session.set("auth_token", token)
+            table.add(req)
+    ```
+  </Tab>
+
+  <Tab title="Stacked filters">
+    ```python
+    @filter.status([200])
+    @filter.interesting()
+    @filter.length_range(min=1000)
+    @filter.contains("admin")
+    def handle_response(req):
+        """Only show 200s that are interesting, >1KB, contain 'admin'."""
+        table.add(req)
+    ```
+  </Tab>
+</Tabs>
+
+### `onStop()` - Optional
+
+**Purpose:** Cleanup after fuzzing stops.
+
+**Execution:** Runs **once** when:
+- All queued requests complete
+- User clicks "Stop"
+- Script errors
+
+**Returns:** None
+
+```python
+def onStop():
+    """Cleanup and final logging."""
+    # Log statistics
+    total = session.get("total_requests", 0)
+    interesting = session.get("interesting_count", 0)
+    print_log("Completed {} requests, {} interesting".format(total, interesting))
+
+    # Clean up state
+    session.clear()
+
+    # Close resources (if any)
+    # close_file_handles()
+```
+
+**Common patterns:**
+
+<Tabs>
+  <Tab title="Statistics logging">
+    ```python
+    def onStop():
+        """Log final statistics."""
+        total = session.get("request_count", 0)
+        errors = session.get("error_count", 0)
+        print_log("Fuzzing complete: {} requests, {} errors".format(total, errors))
+    ```
+  </Tab>
+
+  <Tab title="State cleanup">
+    ```python
+    def onStop():
+        """Clear session state."""
+        session.clear()
+        print_log("Session state cleared")
+    ```
+  </Tab>
+
+  <Tab title="No cleanup needed">
+    ```python
+    # If no cleanup needed, omit onStop() entirely
+    # def onStop():
+    #     pass
+    ```
+  </Tab>
+</Tabs>
+
+## RequestObject Properties
+
+The `req` parameter in `handle_response()` provides these properties:
+
+| Property | Type | Description | Example |
+|----------|------|-------------|---------|
+| `req.status` | `int` | HTTP status code | `200`, `404`, `500` |
+| `req.length` | `int` | Response body length (bytes) | `1024` |
+| `req.text` | `str` | Response body as string | `"<html>..."` |
+| `req.body` | `str` | Response body as string | `"<html>..."` |
+| `req.interesting` | `bool` | Learn mode flagged as interesting | `True`, `False` |
+| `req.url` | `str` | Request URL | `"https://example.com/admin"` |
+| `req.method` | `str` | HTTP method | `"GET"`, `"POST"` |
+| `req.headers` | `List[HttpHeader]` | Response headers (Java List) | Use `req.header("Name")` helper |
+| `req.cookies` | `List[Cookie]` | Response cookies (Java List) | Use `req.cookie("Name")` helper |
+
+<Accordion title="Property access examples">
+```python
+def handle_response(req):
+    # Status code
+    if req.status == 200:
+        print_log("Success")
+
+    # Content length
+    if req.length > 10000:
+        print_log("Large response")
+
+    # Body as string (for text content)
+    if "admin" in req.text.lower():
+        print_log("Found admin panel")
+
+    # Body as bytes (for binary content)
+    import hashlib
+    hash = hashlib.md5(req.body).hexdigest()
+
+    # Learn mode flag
+    if req.interesting:
+        table.add(req)
+
+    # URL and method
+    print_log("{} {} -> {}".format(req.method, req.url, req.status))
+
+    # Headers
+    content_type = req.headers.get("Content-Type", "unknown")
+```
+</Accordion>
+
+## Injected Variables
+
+Scripts have access to these global variables without imports:
+
+### Core APIs
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `fuzz` | Main fuzzing API | `fuzz.url(url).queue()` |
+| `filter` | Response filter decorators | `@filter.status([200])` |
+| `table` | Results table API | `table.add(req)` |
+| `session` | Thread-safe state storage | `session.set("key", "value")` |
+
+### Data Sources
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `payloads` | Wordlist access | `payloads.wordlist(1)` |
+| `templates` | Template access (Multiple Requests) | `templates.all()` |
+
+### Utilities
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `encode` | Encoding utilities | `encode.base64("text")` |
+| `decode` | Decoding utilities | `decode.url("%20")` |
+| `hash` | Hashing utilities | `hash.md5("text")` |
+| `utils` | General utilities | `utils.randstr(8)` |
+
+### Java Interop
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `print_log` | Standard output logging | `print_log("message")` |
+| `print_err` | Error output logging | `print_err("error")` |
+| `api` | Montoya API instance (advanced) | `api.logging().logToOutput()` |
+| `burp_api` | Alias for `api` | `burp_api.utilities()` |
+| `handler` | Script bridge (advanced) | `handler.getEngine()` |
+
+See [API Reference](/scripting/api-reference) for complete method documentation.
+
+## Example Structures
+
+### Basic Fuzzing
+
+```python
+"""Simple URL fuzzing with wordlist."""
+
+def queue_tasks():
+    for url in payloads.wordlist(1):
+        fuzz.url(url).queue()
+    fuzz.done()
+
+@filter.status([200])
+def handle_response(req):
+    table.add(req)
+```
+
+### With Learn Mode
+
+```python
+"""Fuzzing with automatic calibration."""
+
+def queue_tasks():
+    # Calibrate
+    for i in range(5):
+        payload = utils.randstr(8)
+        fuzz.payloads([payload]).learn_group(i + 1).queue()
+
+    # Fuzz
+    for payload in payloads.wordlist(1):
+        fuzz.payloads([payload]).queue()
+
+    fuzz.done()
+
+@filter.interesting()
+def handle_response(req):
+    table.add(req)
+```
+
+### Request Chaining
+
+```python
+"""Multi-step authentication flow."""
+
+def queue_tasks():
+    # Step 1: Login
+    login_req = utils.http_request_from_url("https://example.com/login")
+    login_req = login_req.withBody('{"user":"admin","pass":"admin"}')
+    resp = fuzz.http_request(login_req).send()
+
+    # Step 2: Extract token
+    import json
+    token = json.loads(resp.body).get("token")
+
+    # Step 3: Access protected resources
+    for endpoint in payloads.wordlist(1):
+        req = utils.http_request_from_url(f"https://example.com/{endpoint}")
+        req = req.withHeader("Authorization", f"Bearer {token}")
+        fuzz.http_request(req).queue()
+
+    fuzz.done()
+
+def handle_response(req):
+    if req.status != 401:  # Not unauthorized
+        table.add(req)
+```
+
+### Advanced Filtering
+
+```python
+"""Complex response filtering with statistics."""
+
+FOUND_COUNT = 0
+
+def queue_tasks():
+    for payload in payloads.wordlist(1):
+        fuzz.url(f"https://example.com/{payload}").queue()
+    fuzz.done()
+
+@filter.status([200, 201, 202])
+@filter.length_range(min=1000)
+@filter.contains("admin")
+def handle_response(req):
+    global FOUND_COUNT
+    FOUND_COUNT += 1
+    table.add(req)
+
+def onStop():
+    print_log("Found {} interesting responses".format(FOUND_COUNT))
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="API Reference" icon="book" href="/scripting/api-reference">
+    Complete method documentation
+  </Card>
+  <Card title="Examples" icon="code" href="/scripting/examples">
+    Real-world fuzzing patterns
+  </Card>
+  <Card title="Learn Mode" icon="brain" href="/scripting/learn-mode">
+    Automatic response filtering
+  </Card>
+  <Card title="Overview" icon="home" href="/scripting">
+    Back to scripting overview
+  </Card>
+</CardGroup>

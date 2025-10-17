@@ -1,0 +1,1275 @@
+---
+title: API Reference
+description: Complete reference for MutaFuzz's Python scripting API with all methods, parameters, and examples
+keywords: [api, python, reference, methods, fuzz, filter, table, session, payloads, encode, decode]
+icon: "book-bookmark"
+---
+
+# API Reference
+
+Complete documentation for MutaFuzz's Python scripting API. All objects are globally available without imports.
+
+## Table of Contents
+
+<AccordionGroup>
+  <Accordion title="Core Fuzzing APIs">
+    - [fuzz](#fuzz---fuzzing-operations) - url(), payloads(), http_request(), .learn_group(), .queue(), .send()
+    - [filter](#filter---response-filter-decorators) - Response filter decorators
+    - [table](#table---results-table) - Results table management
+  </Accordion>
+
+  <Accordion title="Data Sources & State">
+    - [payloads](#payloads---wordlist-access) - Wordlist access (wordlist 1, 2, 3)
+    - [templates](#templates---template-access) - Template access (Multiple Requests mode)
+    - [session](#session---state-storage) - Thread-safe state storage
+  </Accordion>
+
+  <Accordion title="Utilities">
+    - [encode](#encode---encoding-utilities) - Encoding (base64, url, html, json)
+    - [decode](#decode---decoding-utilities) - Decoding (base64, url, html, json)
+    - [hash](#hash---hashing-utilities) - Hashing (md5, sha256)
+    - [utils](#utils---general-utilities) - General utilities (randstr, sleep, chunked)
+    - [Logging](#logging---output-functions) - Output logging (print_log, print_err)
+  </Accordion>
+
+  <Accordion title="Data Objects">
+    - [RequestObject](#requestobject---response-properties) - Response properties (status, length, text, etc.)
+  </Accordion>
+
+  <Accordion title="Advanced">
+    - [Java Interop](#java-interop-advanced) - Montoya API access
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## fuzz - Fuzzing Operations
+
+Main API for queuing and sending HTTP requests. Each method returns a builder for chaining.
+
+### How It Works
+
+All `fuzz` methods return a builder object that you chain:
+
+```python
+fuzz.url("...").learn_group(1).queue()
+  ↑         ↑         ↑          ↑
+starter  builder   chain     execute
+```
+
+---
+
+### fuzz.url(url)
+
+Start building request from URL.
+
+**Parameters:**
+- `url` (str): Target URL including protocol
+
+**Returns:** `QueueBuilder` for chaining
+
+**Example:**
+```python
+# Simple GET request
+fuzz.url("https://example.com/admin").queue()
+
+# With learn mode
+fuzz.url("https://example.com/api").learn_group(1).queue()
+
+# Synchronous
+resp = fuzz.url("https://example.com").send()
+```
+
+---
+
+### fuzz.payloads(payloads)
+
+Start building request with payloads to inject at `%s` markers in template.
+
+**Parameters:**
+- `payloads` (str | list[str]): Single payload or list of payloads
+
+**Returns:** `QueueBuilder` for chaining
+
+**Example:**
+```python
+# Single payload (string)
+fuzz.payloads("admin").queue()
+
+# Multiple payloads (list)
+fuzz.payloads(["admin", "root", "test"]).queue()
+
+# Inject at multiple markers
+template = "GET /%s/%s HTTP/1.1\r\nHost: example.com\r\n\r\n"
+fuzz.raw_request(template).payloads(["admin", "users"]).queue()
+```
+
+---
+
+### fuzz.raw_request(template)
+
+Start building request from raw HTTP template with `%s` markers.
+
+**Parameters:**
+- `template` (str): Raw HTTP request with `%s` markers for payload injection
+
+**Returns:** `QueueBuilder` for chaining
+
+**Example:**
+```python
+template = """GET /%s HTTP/1.1
+Host: example.com
+User-Agent: CustomFuzzer/1.0
+
+"""
+
+# Inject payloads at %s marker
+for payload in payloads.wordlist(1):
+    fuzz.raw_request(template).payloads([payload]).queue()
+```
+
+---
+
+### fuzz.http_request(request)
+
+Start building request from pre-built `HttpRequest` object (Montoya API).
+
+**Parameters:**
+- `request` (HttpRequest): Burp Suite Montoya API request object
+
+**Returns:** `QueueBuilder` for chaining
+
+**Example:**
+```python
+# Build request with Montoya API
+req = utils.http_request_from_url("https://example.com/api")
+req = req.withHeader("Authorization", "Bearer token123")
+req = req.withBody('{"user":"admin"}')
+
+fuzz.http_request(req).queue()
+
+# Modify existing request
+from burp.api.montoya.http.message.params import HttpParameter, HttpParameterType
+
+for template in templates.all():
+    orig_req = template.request()
+    modified = orig_req.withUpdatedParameters(
+        HttpParameter.parameter("id", "PAYLOAD", HttpParameterType.URL)
+    )
+    fuzz.http_request(modified).queue()
+```
+
+---
+
+### fuzz.current_template()
+
+Start building request from template editor.
+
+**Returns:** `QueueBuilder` for chaining
+
+**Example:**
+```python
+# Use request from template editor
+fuzz.current_template().queue()
+
+# Modify before sending
+# (Note: current_template() returns builder, not HttpRequest)
+# Use utils.get_current_template() to get HttpRequest for modification
+```
+
+---
+
+### Configuration Methods
+
+Chain these methods after starting with `fuzz.url()`, `fuzz.payloads()`, etc. to configure your request.
+
+#### .learn_group(group_id)
+
+Enable learn mode for automatic response filtering.
+
+**Parameters:**
+- `group_id` (int): Learn group ID (1-N enables learning, 0 disables)
+
+**Returns:** Self for chaining
+
+**Example:**
+```python
+# Each learn group tracks its own baseline
+fuzz.payloads([utils.randstr(8)]).learn_group(1).queue()
+fuzz.payloads([utils.randstr(8) + "/"]).learn_group(2).queue()
+
+# Main fuzzing (no learn group = uses all calibration data)
+for payload in payloads.wordlist(1):
+    fuzz.payloads([payload]).queue()
+```
+
+See [Learn Mode](/scripting/learn-mode) for details.
+
+---
+
+### Execution Methods
+
+These methods execute the request. Always the **last** method in your chain.
+
+#### .queue()
+
+Queue request for async execution. Non-blocking.
+
+**Returns:** Self (for chaining, though typically end of chain)
+
+**Example:**
+```python
+# Returns immediately, request executes in background
+fuzz.url("https://example.com").queue()
+
+# Responses processed by handle_response()
+```
+
+---
+
+#### .send()
+
+Send request synchronously. **Blocks** until response received.
+
+**Returns:** `RequestObject` with populated response
+
+**Example:**
+```python
+# Blocks until response received
+resp = fuzz.url("https://example.com/uuid").send()
+
+# Use response data immediately
+uuid = extract_uuid(resp.body)
+req2 = utils.http_request_from_url(f"https://example.com/data/{uuid}")
+resp2 = fuzz.http_request(req2).send()
+```
+
+<Note>
+`.send()` does NOT trigger `handle_response()` or learn mode. Returns `RequestObject` directly.
+</Note>
+
+---
+
+### fuzz.done()
+
+Signal that no more tasks will be queued. **Required** when using `.queue()`.
+
+**Returns:** None
+
+**Example:**
+```python
+def queue_tasks():
+    for url in payloads.wordlist(1):
+        fuzz.url(url).queue()
+
+    fuzz.done()  # Required - tells fuzzer all tasks are queued
+```
+
+<Warning>
+Forgetting `fuzz.done()` will cause fuzzer to wait indefinitely for more tasks.
+</Warning>
+
+---
+
+## filter - Response Filter Decorators
+
+Stack decorators on `handle_response()` to filter which responses reach handler.
+
+### @filter.status(codes)
+
+Include only responses with these status codes.
+
+**Parameters:**
+- `codes` (int | list[int]): Status code(s) to include
+
+**Example:**
+```python
+# Single status
+@filter.status(200)
+def handle_response(req):
+    table.add(req)
+
+# Multiple statuses
+@filter.status([200, 201, 202])
+def handle_response(req):
+    table.add(req)
+```
+
+---
+
+### @filter.status_not(codes)
+
+Exclude responses with these status codes.
+
+**Parameters:**
+- `codes` (int | list[int]): Status code(s) to exclude
+
+**Example:**
+```python
+# Exclude common boring responses
+@filter.status_not([404, 500, 502, 503])
+def handle_response(req):
+    table.add(req)
+```
+
+---
+
+### @filter.interesting()
+
+Include only responses flagged as interesting by learn mode.
+
+**Example:**
+```python
+@filter.interesting()
+def handle_response(req):
+    # Only processes responses that differ from calibration baseline
+    table.add(req)
+```
+
+See [Learn Mode](/scripting/learn-mode) for details.
+
+---
+
+### @filter.length_range(min=None, max=None)
+
+Filter by response body length (bytes).
+
+**Parameters:**
+- `min` (int, optional): Minimum length (inclusive)
+- `max` (int, optional): Maximum length (inclusive)
+
+**Example:**
+```python
+# Minimum only
+@filter.length_range(min=1000)
+def handle_response(req):
+    table.add(req)
+
+# Maximum only
+@filter.length_range(max=5000)
+def handle_response(req):
+    table.add(req)
+
+# Range
+@filter.length_range(min=1000, max=5000)
+def handle_response(req):
+    table.add(req)
+```
+
+---
+
+### @filter.contains(*keywords)
+
+Include only if body contains **all** keywords (case-insensitive).
+
+**Parameters:**
+- `*keywords` (str): Keywords that must all be present
+
+**Example:**
+```python
+# Single keyword
+@filter.contains("admin")
+def handle_response(req):
+    table.add(req)
+
+# Multiple keywords (AND logic)
+@filter.contains("admin", "panel", "dashboard")
+def handle_response(req):
+    # Only if body contains "admin" AND "panel" AND "dashboard"
+    table.add(req)
+```
+
+---
+
+### @filter.matches(pattern, ignore_case=False)
+
+Include only if body matches regex pattern.
+
+**Parameters:**
+- `pattern` (str): Regular expression pattern
+- `ignore_case` (bool, optional): Case-insensitive matching. Default: False
+
+**Example:**
+```python
+# Case-sensitive
+@filter.matches(r"error|warning|exception")
+def handle_response(req):
+    table.add(req)
+
+# Case-insensitive
+@filter.matches(r"admin|root|superuser", ignore_case=True)
+def handle_response(req):
+    table.add(req)
+```
+
+---
+
+### Stacking Filters
+
+Decorators stack top-to-bottom. Response must pass **all** filters.
+
+**Example:**
+```python
+# Must be 200 AND interesting AND contain "admin"
+@filter.status([200])
+@filter.interesting()
+@filter.contains("admin")
+def handle_response(req):
+    table.add(req)
+
+# Complex filtering
+@filter.status_not([404, 500])         # Not 404/500
+@filter.length_range(min=1000)         # At least 1KB
+@filter.matches(r"admin|panel")        # Contains admin or panel
+@filter.interesting()                  # Learn mode flagged it
+def handle_response(req):
+    table.add(req)
+```
+
+---
+
+## table - Results Table
+
+Add results to UI table.
+
+### table.add(req)
+
+Add request/response to results table.
+
+**Parameters:**
+- `req` (RequestObject): Request/response to display
+
+**Returns:** None
+
+**Example:**
+```python
+def handle_response(req):
+    if req.status == 200:
+        table.add(req)
+```
+
+---
+
+### table.add_if(req, condition)
+
+Conditionally add to table.
+
+**Parameters:**
+- `req` (RequestObject): Request/response to display
+- `condition` (bool | callable): Boolean or function returning boolean
+
+**Returns:** None
+
+**Example:**
+```python
+# Boolean condition
+def handle_response(req):
+    table.add_if(req, req.length > 1000)
+
+# Callable condition
+def is_interesting(req):
+    return "admin" in req.text.lower() and req.status == 200
+
+def handle_response(req):
+    table.add_if(req, is_interesting)
+```
+
+---
+
+## session - State Storage
+
+Thread-safe key-value store for multi-step workflows.
+
+### session.set(key, value)
+
+Store a value.
+
+**Parameters:**
+- `key` (str): Session key
+- `value` (any): Value to store (must be serializable)
+
+**Returns:** None
+
+**Example:**
+```python
+def handle_response(req):
+    if "token" in req.text:
+        token = extract_token(req.body)
+        session.set("auth_token", token)
+```
+
+---
+
+### session.get(key, default=None)
+
+Retrieve a value.
+
+**Parameters:**
+- `key` (str): Session key
+- `default` (any, optional): Value if key not found. Default: None
+
+**Returns:** Stored value or default
+
+**Example:**
+```python
+def queue_tasks():
+    # Get stored token or use default
+    token = session.get("auth_token", "default_token")
+
+    req = utils.http_request_from_url("https://example.com/api")
+    req = req.withHeader("Authorization", f"Bearer {token}")
+    fuzz.http_request(req).queue()
+
+    fuzz.done()
+```
+
+---
+
+### session.clear()
+
+Clear all session state.
+
+**Returns:** None
+
+**Example:**
+```python
+def onStop():
+    session.clear()
+```
+
+---
+
+### session.increment(key)
+
+Increment counter (creates if not exists).
+
+**Parameters:**
+- `key` (str): Counter key
+
+**Returns:** New counter value (int)
+
+**Example:**
+```python
+def handle_response(req):
+    count = session.increment("request_count")
+    if count % 100 == 0:
+        print_log("Processed {} requests".format(count))
+```
+
+---
+
+### session.contains(key)
+
+Check if key exists.
+
+**Parameters:**
+- `key` (str): Key to check
+
+**Returns:** bool
+
+**Example:**
+```python
+def queue_tasks():
+    if not session.contains("initialized"):
+        # First run initialization
+        session.set("initialized", True)
+        initialize()
+
+    fuzz.done()
+```
+
+---
+
+## payloads - Wordlist Access
+
+Access configured wordlists.
+
+### payloads.wordlist(num)
+
+Get wordlist by number (1, 2, or 3).
+
+**Parameters:**
+- `num` (int): Wordlist number (1, 2, or 3)
+
+**Returns:** list[str]
+
+**Example:**
+```python
+def queue_tasks():
+    # Wordlist 1
+    for payload in payloads.wordlist(1):
+        fuzz.payloads([payload]).queue()
+
+    # Wordlist 2
+    for payload in payloads.wordlist(2):
+        fuzz.payloads([payload]).queue()
+
+    fuzz.done()
+```
+
+---
+
+### payloads.all()
+
+Get all wordlists combined.
+
+**Returns:** list[str]
+
+**Example:**
+```python
+def queue_tasks():
+    # All payloads from wordlists 1, 2, 3
+    all_payloads = payloads.all()
+    for payload in all_payloads:
+        fuzz.payloads([payload]).queue()
+
+    fuzz.done()
+```
+
+---
+
+## templates - Template Access
+
+Access raw HTTP templates (Multiple Requests mode only).
+
+### templates.get(num)
+
+Get template by 1-based index.
+
+**Parameters:**
+- `num` (int): Template index (1-based)
+
+**Returns:** HttpRequestResponse or None
+
+**Example:**
+```python
+def queue_tasks():
+    # Get first template
+    template = templates.get(1)
+    if template:
+        req = template.request()
+        fuzz.http_request(req).queue()
+
+    fuzz.done()
+```
+
+---
+
+### templates.all()
+
+Get all templates.
+
+**Returns:** list[HttpRequestResponse]
+
+**Example:**
+```python
+def queue_tasks():
+    # Process all templates
+    for template in templates.all():
+        req = template.request()
+
+        # Modify request
+        modified = req.withHeader("X-Custom", "Value")
+        fuzz.http_request(modified).queue()
+
+    fuzz.done()
+```
+
+---
+
+### templates.count()
+
+Get template count.
+
+**Returns:** int
+
+**Example:**
+```python
+def queue_tasks():
+    total = templates.count()
+    print_log("Processing {} templates".format(total))
+
+    for i in range(1, total + 1):
+        template = templates.get(i)
+        req = template.request()
+        fuzz.http_request(req).queue()
+
+    fuzz.done()
+```
+
+---
+
+## encode - Encoding Utilities
+
+### encode.base64(s)
+
+Base64 encode string.
+
+**Parameters:**
+- `s` (str): String to encode
+
+**Returns:** str (base64 encoded)
+
+**Example:**
+```python
+payload = encode.base64("admin:password")
+# "YWRtaW46cGFzc3dvcmQ="
+```
+
+---
+
+### encode.url(s)
+
+URL encode string.
+
+**Parameters:**
+- `s` (str): String to encode
+
+**Returns:** str (URL encoded)
+
+**Example:**
+```python
+payload = encode.url("admin panel")
+# "admin%20panel"
+
+# Required for special chars in URLs
+payload = encode.url("test'\"<>\\")
+# "test%27%22%3C%3E%5C"
+```
+
+---
+
+### encode.html(s)
+
+HTML entity encode string.
+
+**Parameters:**
+- `s` (str): String to encode
+
+**Returns:** str (HTML encoded)
+
+**Example:**
+```python
+payload = encode.html("<script>alert(1)</script>")
+# "&lt;script&gt;alert(1)&lt;/script&gt;"
+```
+
+---
+
+### encode.json(s)
+
+Escape string for JSON (does NOT add surrounding quotes).
+
+**Parameters:**
+- `s` (str): String to escape
+
+**Returns:** str (JSON escaped)
+
+**Example:**
+```python
+payload = encode.json('test"value')
+# 'test\\"value'
+
+# Use in JSON construction
+body = '{"user":"' + encode.json(username) + '"}'
+```
+
+---
+
+## decode - Decoding Utilities
+
+### decode.base64(s)
+
+Base64 decode string.
+
+**Parameters:**
+- `s` (str): Base64 encoded string
+
+**Returns:** str (decoded)
+
+**Example:**
+```python
+decoded = decode.base64("YWRtaW46cGFzc3dvcmQ=")
+# "admin:password"
+```
+
+---
+
+### decode.url(s)
+
+URL decode string.
+
+**Parameters:**
+- `s` (str): URL encoded string
+
+**Returns:** str (decoded)
+
+**Example:**
+```python
+decoded = decode.url("admin%20panel")
+# "admin panel"
+```
+
+---
+
+### decode.html(s)
+
+HTML entity decode string.
+
+**Parameters:**
+- `s` (str): HTML encoded string
+
+**Returns:** str (decoded)
+
+**Example:**
+```python
+decoded = decode.html("&lt;script&gt;alert(1)&lt;/script&gt;")
+# "<script>alert(1)</script>"
+```
+
+---
+
+### decode.json(s)
+
+Unescape JSON string (reverses encode.json).
+
+**Parameters:**
+- `s` (str): JSON escaped string
+
+**Returns:** str (unescaped)
+
+**Example:**
+```python
+decoded = decode.json('test\\"value')
+# 'test"value'
+```
+
+---
+
+## hash - Hashing Utilities
+
+### hash.md5(s)
+
+Compute MD5 hash.
+
+**Parameters:**
+- `s` (str): String to hash
+
+**Returns:** str (hex-encoded hash)
+
+**Example:**
+```python
+signature = hash.md5("admin")
+# "21232f297a57a5a743894a0e4a801fc3"
+```
+
+---
+
+### hash.sha256(s)
+
+Compute SHA-256 hash.
+
+**Parameters:**
+- `s` (str): String to hash
+
+**Returns:** str (hex-encoded hash)
+
+**Example:**
+```python
+signature = hash.sha256("admin")
+# "8c6976e5b5410415bde908bd4dee15dfb167a9c873fc4bb8a81f6f2ab448a918"
+```
+
+---
+
+## utils - General Utilities
+
+### utils.randstr(length=12, digits=True)
+
+Generate random string.
+
+**Parameters:**
+- `length` (int, optional): String length. Default: 12
+- `digits` (bool, optional): Include digits. Default: True
+
+**Returns:** str (random lowercase letters + optional digits)
+
+**Example:**
+```python
+# Default: 12 chars, letters + digits
+random_id = utils.randstr()
+# "a7k3m9x2p5q1"
+
+# Custom length
+short_id = utils.randstr(length=6)
+# "k3m9x2"
+
+# Letters only
+letters_only = utils.randstr(length=8, digits=False)
+# "abcdefgh"
+```
+
+---
+
+### utils.sleep(ms)
+
+Sleep for milliseconds.
+
+**Parameters:**
+- `ms` (int): Milliseconds to sleep
+
+**Returns:** None
+
+**Example:**
+```python
+def queue_tasks():
+    # Calibration phase
+    for i in range(5):
+        fuzz.payloads([utils.randstr(8)]).learn_group(i + 1).queue()
+
+    # Wait for calibration to complete
+    utils.sleep(500)
+
+    # Main fuzzing
+    for payload in payloads.wordlist(1):
+        fuzz.payloads([payload]).queue()
+
+    fuzz.done()
+```
+
+---
+
+### utils.chunked(iterable, size)
+
+Split iterable into chunks.
+
+**Parameters:**
+- `iterable` (iterable): Items to chunk
+- `size` (int): Chunk size
+
+**Returns:** Generator yielding lists of size `size`
+
+**Example:**
+```python
+def queue_tasks():
+    all_payloads = payloads.wordlist(1)
+
+    # Process in batches of 100
+    for batch in utils.chunked(all_payloads, 100):
+        for payload in batch:
+            fuzz.payloads([payload]).queue()
+
+        # Wait between batches
+        utils.sleep(100)
+
+    fuzz.done()
+```
+
+---
+
+### utils.http_request_from_url(url)
+
+Create HttpRequest from URL (Montoya API).
+
+**Parameters:**
+- `url` (str): Target URL
+
+**Returns:** HttpRequest (customizable with `.withHeader()`, etc.)
+
+**Example:**
+```python
+# Create request
+req = utils.http_request_from_url("https://example.com/api")
+
+# Customize before sending
+req = req.withHeader("Authorization", "Bearer token123")
+req = req.withHeader("User-Agent", "CustomFuzzer/1.0")
+req = req.withBody('{"action":"test"}')
+
+fuzz.http_request(req).queue()
+```
+
+---
+
+### utils.get_current_template()
+
+Get current HttpRequest from template editor.
+
+**Returns:** HttpRequest or None
+
+**Example:**
+```python
+def queue_tasks():
+    template_req = utils.get_current_template()
+    if template_req:
+        # Count %s markers
+        marker_count = template_req.toString().count("%s")
+
+        # Generate payloads
+        for payload in payloads.wordlist(1):
+            fuzz.payloads([payload] * marker_count).queue()
+
+    fuzz.done()
+```
+
+---
+
+## Logging - Output Functions
+
+Simple logging functions that write to Burp Suite's output tabs.
+
+### print_log(message)
+
+Print message to Burp Suite's standard output tab.
+
+**Parameters:**
+- `message` (any): Message to log (automatically converted to string)
+
+**Returns:** None
+
+**Example:**
+```python
+def queue_tasks():
+    print_log("Starting fuzzing with {} payloads".format(len(payloads.wordlist(1))))
+
+    for payload in payloads.wordlist(1):
+        fuzz.url("https://example.com/" + payload).queue()
+
+    fuzz.done()
+    print_log("All tasks queued")
+
+def handle_response(req):
+    print_log("Received {} from {}".format(req.status, req.url))
+    table.add(req)
+```
+
+**Where to view:**
+- Dashboard → Select fuzzer → Output tab
+- Burp → Extensions → MutaFuzz → Output tab
+
+---
+
+### print_err(message)
+
+Print error message to Burp Suite's error output tab.
+
+**Parameters:**
+- `message` (any): Error message to log (automatically converted to string)
+
+**Returns:** None
+
+**Example:**
+```python
+def queue_tasks():
+    token = session.get("auth_token")
+    if not token:
+        print_err("Missing authentication token")
+        fuzz.done()
+        return
+
+    print_log("Using token: " + token[:8] + "...")
+    fuzz.done()
+
+def handle_response(req):
+    if req.status >= 500:
+        print_err("Server error: {} returned {}".format(req.url, req.status))
+    elif req.status == 404:
+        print_log("Not found: {}".format(req.url))
+
+    table.add(req)
+```
+
+**Where to view:**
+- Dashboard → Select fuzzer → Errors tab
+- Burp → Extensions → MutaFuzz → Errors tab
+
+**Use cases:**
+- `print_log()` for informational messages (progress, counts, status)
+- `print_err()` for errors, warnings, and unexpected conditions
+
+<Note>
+These functions are simpler alternatives to `burp_api.logging().logToOutput()` and `burp_api.logging().logToError()`. For advanced logging control, you can still use the Montoya API directly.
+</Note>
+
+---
+
+## RequestObject - Response Properties
+
+The `req` parameter in `handle_response()` provides these properties:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `req.status` | int | HTTP status code |
+| `req.length` | int | Response body length (bytes) |
+| `req.text` | str | Response body as string |
+| `req.body` | str | Response body as string (alias for `text`) |
+| `req.interesting` | bool | Learn mode flagged as interesting |
+| `req.url` | str | Request URL |
+| `req.method` | str | HTTP method (GET, POST, etc.) |
+| `req.headers` | List[HttpHeader] | Response headers (Java List from Montoya API) |
+| `req.cookies` | List[Cookie] | Response cookies (Java List from Montoya API) |
+
+<Note>
+**Headers & Cookies Access:** `req.headers` and `req.cookies` return Java `List` objects from Burp's Montoya API. For convenient access, use the helper methods `req.header(name)` and `req.cookie(name)` instead of iterating the lists.
+
+```python
+# Recommended - use helper methods
+content_type = req.header("Content-Type")  # Returns str or None
+session_id = req.cookie("JSESSIONID")      # Returns str or None
+
+# Alternative - iterate the Java List
+for h in req.headers:
+    if h.name() == "Content-Type":
+        content_type = h.value()
+```
+</Note>
+
+**Example:**
+```python
+def handle_response(req):
+    # Status
+    if req.status == 200:
+        print_log("Success")
+
+    # Length
+    if req.length > 10000:
+        print_log("Large response")
+
+    # Text content
+    if "admin" in req.text.lower():
+        print_log("Found admin")
+
+    # Learn mode
+    if req.interesting:
+        table.add(req)
+
+    # URL/method
+    print_log("{} {}".format(req.method, req.url))
+
+    # Headers (use helper method)
+    content_type = req.header("Content-Type") or "unknown"
+```
+
+---
+
+### Convenience Properties
+
+Additional helper properties and methods for common checks:
+
+| Property/Method | Type | Description |
+|-----------------|------|-------------|
+| `req.ok` | bool | True if status 200-399 |
+| `req.is_redirect` | bool | True if status 300-399 |
+| `req.is_client_error` | bool | True if status 400-499 |
+| `req.is_server_error` | bool | True if status 500-599 |
+| `req.header(name)` | str\|None | Get header value (case-insensitive) |
+| `req.cookie(name)` | str\|None | Get cookie value |
+| `req.time` | int | Response time in milliseconds (alias for `responseTime`) |
+
+**Example:**
+```python
+def handle_response(req):
+    # Status helpers
+    if req.ok and req.header("X-Admin") == "true":
+        table.add(req)
+
+    if req.is_server_error:
+        print_err("Server error at {}".format(req.url))
+
+    # Cookie access
+    if req.cookie("admin_session"):
+        print_log("Admin session detected")
+
+    # Response time
+    if req.time > 5000:
+        print_log("Slow response detected")
+```
+
+---
+
+## Java Interop (Advanced)
+
+### api / burp_api
+
+Access Burp Suite's Montoya API directly.
+
+**Type:** `MontoyaApi`
+
+**Example:**
+```python
+# Simple logging (recommended)
+print_log("Custom message")
+print_err("Error message")
+
+# Advanced logging (low-level)
+api.logging().logToOutput("Custom message")
+api.logging().logToError("Error message")
+
+# Utilities
+base64 = api.utilities().base64Utils()
+encoded = base64.encode("test")
+
+# HTTP service (advanced)
+http_service = api.http().createHttpService("example.com", 443, True)
+```
+
+<Tip>
+Use `print_log()` and `print_err()` for simple logging. Use `api.logging()` only when you need advanced control.
+</Tip>
+
+### handler
+
+Low-level bridge to fuzzer engine. **Use high-level APIs instead.**
+
+**Type:** `PythonScriptBridge`
+
+**Example:**
+```python
+# ❌ Don't use directly
+handler.queueUrl(url, 0)
+
+# ✅ Use high-level API
+fuzz.url(url).queue()
+```
+
+---
+
+## Method Count Summary
+
+<Accordion title="API method count by module">
+| Module | Methods | Description |
+|--------|---------|-------------|
+| **fuzz** | 6 | url(), payloads(), raw_request(), http_request(), current_template(), done() |
+| **QueueBuilder** | 9 | url(), raw_request(), payloads(), learn_group(), http_request(), current_template(), queue(), send() |
+| **filter** | 6 | status(), status_not(), interesting(), length_range(), contains(), matches() |
+| **table** | 2 | add(), add_if() |
+| **session** | 5 | set(), get(), clear(), increment(), contains() |
+| **payloads** | 2 | wordlist(), all() |
+| **templates** | 3 | get(), all(), count() |
+| **encode** | 4 | base64(), url(), html(), json() |
+| **decode** | 4 | base64(), url(), html(), json() |
+| **hash** | 2 | md5(), sha256() |
+| **utils** | 5 | randstr(), sleep(), chunked(), http_request_from_url(), get_current_template() |
+| **Logging** | 2 | print_log(), print_err() |
+| **RequestObject** | 8 | status, length, text, body, interesting, url, method, headers (properties) |
+| **Total** | **58 methods** | Complete API surface |
+</Accordion>
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Examples" icon="code" href="/scripting/examples">
+    Real-world fuzzing patterns
+  </Card>
+  <Card title="Learn Mode" icon="brain" href="/scripting/learn-mode">
+    Automatic response filtering
+  </Card>
+  <Card title="Template Structure" icon="file-code" href="/scripting/template-structure">
+    Script anatomy and lifecycle
+  </Card>
+  <Card title="Overview" icon="home" href="/scripting">
+    Back to scripting overview
+  </Card>
+</CardGroup>

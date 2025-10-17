@@ -1,0 +1,271 @@
+---
+title: "FAQ"
+description: "Common questions about MutaFuzz and fuzzing workflows"
+icon: "circle-question"
+---
+
+## General
+
+<AccordionGroup>
+  <Accordion title="What is MutaFuzz?" icon="circle-info" iconType="solid">
+    MutaFuzz is a Python-scriptable fuzzer for Burp Suite Professional. It provides a flexible fuzzing framework with intelligent learn mode filtering, multiple usage modes, and full access to Burp's Montoya API.
+  </Accordion>
+
+  <Accordion title="Do I need Burp Suite Professional?" icon="shield" iconType="solid">
+    Yes. MutaFuzz requires Burp Suite Professional (version 2025.3 or later) with Montoya API support. It will not work with Burp Suite Community Edition.
+  </Accordion>
+
+  <Accordion title="Which Burp Suite version do I need?" icon="code-branch" iconType="solid">
+    MutaFuzz requires Burp Suite Professional version 2025.3 or later. Earlier versions lack Montoya API support and cannot load the extension.
+
+    Check your version: **Help → About Burp Suite**
+  </Accordion>
+
+  <Accordion title="Is MutaFuzz free?" icon="dollar-sign" iconType="solid">
+    Yes. MutaFuzz is open source and free to use. However, it requires Burp Suite Professional, which is a commercial product.
+
+    **GitHub:** https://github.com/theblackturtle/mutafuzz
+  </Accordion>
+
+  <Accordion title="How does MutaFuzz compare to Burp Intruder?" icon="scale-balanced" iconType="solid">
+    MutaFuzz complements Intruder with Python scripting and learn mode:
+
+    **MutaFuzz advantages:**
+    - Full Python scripting for complex logic
+    - Learn mode auto-filters baseline responses
+    - Multi-step workflows with session state
+    - Programmatic request generation
+
+    **Intruder advantages:**
+    - Built-in attack types (sniper, battering ram, pitchfork)
+    - Grep extract/match without coding
+    - Resource pool integration
+    - GUI-based payload configuration
+
+    **Use MutaFuzz when:** You need Python scripting, multi-step workflows, or intelligent filtering.
+
+    **Use Intruder when:** GUI-based fuzzing is sufficient.
+  </Accordion>
+</AccordionGroup>
+
+## Installation & Setup
+
+<AccordionGroup>
+  <Accordion title="Where do I download MutaFuzz?" icon="download" iconType="solid">
+    Download the latest JAR from GitHub releases:
+
+    **https://github.com/theblackturtle/mutafuzz/releases**
+
+    Look for `mutafuzz-vX.Y.Z.jar` (or latest version).
+  </Accordion>
+
+  <Accordion title="How do I install the extension?" icon="puzzle-piece" iconType="solid">
+    1. Download `mutafuzz-vX.Y.Z.jar` from GitHub releases
+    2. Open Burp Suite Professional
+    3. Go to **Extensions → Installed → Add**
+    4. Select "Java" extension type
+    5. Choose the downloaded JAR file
+    6. Click "Next"
+    7. Verify "MutaFuzz" tab appears in Burp
+
+    See [Installation Guide](/installation) for detailed steps.
+  </Accordion>
+
+  <Accordion title="Extension won't load - what should I check?" icon="triangle-exclamation" iconType="solid">
+    **Check these common issues:**
+
+    1. **Java version:** Check compatibility (`java -version`)
+    2. **Burp version:** Must have Montoya API support
+    3. **Extension type:** Must select "Java" not "Python"
+    4. **JAR corruption:** Re-download from GitHub releases
+    5. **Error logs:** Check Extensions → MutaFuzz → Errors tab
+
+    See [Installation Guide](/installation) for detailed setup steps.
+  </Accordion>
+
+  <Accordion title="Where are my scripts stored?" icon="folder" iconType="solid">
+    **Built-in scripts:** Embedded in JAR (cannot modify)
+
+    **Custom scripts:** Configure in Dashboard → Config tab → Scripts Dir
+
+    **To use custom scripts:**
+    1. Create directory (e.g., `~/mutafuzz-scripts/`)
+    2. Dashboard → Config tab → Scripts Dir → Browse
+    3. Scripts appear in dropdown with built-in scripts
+
+    See [Installation Guide](/installation) for setup details.
+  </Accordion>
+</AccordionGroup>
+
+## Usage & Features
+
+<AccordionGroup>
+  <Accordion title="What is learn mode?" icon="brain" iconType="solid">
+    Learn mode automatically filters baseline responses to show only interesting results.
+
+    **How it works:**
+    1. **Calibration:** Send random payloads to establish baselines
+    2. **Pattern detection:** Track status, length, body hash variations
+    3. **Smart filtering:** Only show responses different from learned patterns
+    4. **Group-based:** Multiple learn groups for different payload types
+
+    **Use `@filter.interesting()` decorator to enable filtering.**
+
+    See [Learn Mode Guide](/scripting/learn-mode) for details.
+  </Accordion>
+
+  <Accordion title="What are the usage modes?" icon="arrows-split-up-and-left" iconType="solid">
+    MutaFuzz has three ways to start fuzzing:
+
+    **1. Text Selection Mode**
+    - Select text → Right-click → "Open MutaFuzz (selecting text)"
+    - Text becomes `%s` marker for payload injection
+    - Best for parameter/path fuzzing
+
+    **2. Multiple Requests Mode**
+    - Select multiple requests → "Send requests to MutaFuzz"
+    - Access via `templates.all()` in Python
+    - Best for bulk request testing
+
+    **3. Empty Panel Mode**
+    - Dashboard → "New Empty Panel"
+    - No pre-loaded template
+    - Build requests entirely in Python
+    - Best for programmatic fuzzing
+
+    See [Usage Modes](/modes/index) for detailed comparison.
+  </Accordion>
+
+  <Accordion title="How do I fuzz multiple positions?" icon="arrows-left-right" iconType="solid">
+    Use multiple `%s` placeholders in your request template. Placeholders are replaced sequentially from the payload list.
+
+    Example: `GET /api/%s?id=%s HTTP/1.1` with payloads `["admin", "123"]` becomes `GET /api/admin?id=123 HTTP/1.1`
+
+    See [Template Structure](/scripting/template-structure) for battering ram, pitchfork, and cluster bomb patterns.
+  </Accordion>
+
+  <Accordion title="Can I extract data from responses?" icon="scissors" iconType="solid">
+    Yes! Use `handle_response()` to extract data with regex, store in `session`, then use in subsequent requests.
+
+    Access response data via: `req.text`, `req.body`, `req.httpResponse`, `req.status`, `req.headers`, `req.cookies`
+
+    See [Script Examples](/scripting/examples) for multi-step workflows with extraction patterns.
+  </Accordion>
+
+  <Accordion title="How do I send requests sequentially?" icon="list-ol" iconType="solid">
+    Use `.send()` for synchronous execution (blocks until response), `.queue()` for async (returns immediately).
+
+    **Key differences:**
+    - `.send()` returns response object directly
+    - `.send()` does NOT trigger `handle_response()` callback
+    - `.send()` responses NOT auto-added to results table
+    - Must call `table.add()` manually if needed
+
+    See [Synchronous Requests](/scripting/examples#synchronous-request-chaining) for chaining patterns.
+  </Accordion>
+</AccordionGroup>
+
+## Python Scripting
+
+<AccordionGroup>
+  <Accordion title="Which Python version does MutaFuzz use?" icon="python" iconType="solid">
+    MutaFuzz uses **Jython 2.7** (Python 2 on JVM). Use Python 2 syntax - no f-strings, C extensions, or Python 3 libraries.
+
+    See [API Reference](/scripting/api-reference) for complete scripting guide and available objects.
+  </Accordion>
+
+  <Accordion title="Why isn't my script working?" icon="code" iconType="solid">
+    Common issues:
+    - Missing `handle_response()` or `queue_tasks()` functions
+    - Forgot to call `fuzz.done()` at end of `queue_tasks()`
+    - Syntax errors (check Errors tab)
+    - Script not selected in dropdown
+    - Engine not started (click Start)
+
+    See [Template Structure](/scripting/template-structure) for required function signatures.
+  </Accordion>
+
+  <Accordion title="How do I debug scripts?" icon="bug" iconType="solid">
+    Use `print_log()` and `print_err()` for logging. View output in:
+    - Dashboard → Output tab (per instance)
+    - Burp → Extensions → MutaFuzz → Output/Errors tabs (global)
+
+    See [Script Examples](/scripting/examples) for debugging patterns.
+  </Accordion>
+</AccordionGroup>
+
+
+## Community & Support
+
+<AccordionGroup>
+  <Accordion title="Where do I report bugs?" icon="bug" iconType="solid">
+    Report bugs on GitHub Issues:
+
+    **https://github.com/theblackturtle/mutafuzz/issues**
+
+    **Include in your report:**
+    - MutaFuzz version
+    - Burp Suite version
+    - Java version (`java -version`)
+    - Steps to reproduce
+    - Error logs from Extensions → MutaFuzz → Errors tab
+    - Screenshots (if UI issue)
+  </Accordion>
+
+  <Accordion title="How do I request a feature?" icon="lightbulb" iconType="solid">
+    Submit feature requests on GitHub Issues:
+
+    **https://github.com/theblackturtle/mutafuzz/issues**
+
+    **Use the "Feature Request" template and include:**
+    - Use case description
+    - Why existing features don't solve it
+    - Expected behavior
+    - Examples/mockups if applicable
+  </Accordion>
+
+  <Accordion title="Can I contribute code?" icon="code-pull-request" iconType="solid">
+    Yes! Contributions welcome.
+
+    **Contributing guide:** https://github.com/theblackturtle/mutafuzz/blob/main/CONTRIBUTING.md
+
+    **Good first contributions:**
+    - Fix typos in documentation
+    - Add script examples
+    - Improve error messages
+    - Write tests
+
+    **Before big changes:**
+    - Open an issue to discuss approach
+    - Get feedback from maintainers
+    - Follow code style guidelines
+  </Accordion>
+
+  <Accordion title="Where can I get help?" icon="life-ring" iconType="solid">
+    **Documentation:** https://docs.mutafuzz.com (this site)
+
+    **Twitter:** [@thebl4ckturtle](https://x.com/thebl4ckturtle)
+
+  </Accordion>
+</AccordionGroup>
+
+## Related Resources
+
+<CardGroup cols={2}>
+  <Card title="Installation Guide" icon="download" href="/installation">
+    Step-by-step installation instructions
+  </Card>
+  <Card title="Quick Start" icon="play" href="/quickstart">
+    Your first fuzzing session in 5 minutes
+  </Card>
+  <Card title="API Reference" icon="book" href="/scripting/api-reference">
+    Complete Python API documentation
+  </Card>
+  <Card title="Script Examples" icon="code" href="/scripting/examples">
+    Real-world fuzzing scripts
+  </Card>
+</CardGroup>
+
+<Tip>
+Can't find what you're looking for? Use the search bar (<kbd>Ctrl</kbd>/<kbd>Cmd</kbd> + <kbd>K</kbd>) to search all documentation.
+</Tip>

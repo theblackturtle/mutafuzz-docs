@@ -1,0 +1,89 @@
+{
+  "$schema": "https://mintlify.com/schema.json",
+  "name": "MutaFuzz",
+  "logo": {
+    "dark": "/logo/dark.svg",
+    "light": "/logo/light.svg"
+  },
+  "favicon": "",
+  "colors": {
+    "primary": "#09090b",
+    "light": "#FAFAFA",
+    "dark": "#0D001D",
+    "background": {
+      "dark": "#09090b"
+    },
+    "anchors": {
+      "from": "#FF7F57",
+      "to": "#FAFAFA"
+    }
+  },
+  "topbarLinks": [
+    {
+      "name": "GitHub",
+      "url": "https://github.com/theblackturtle/mutafuzz"
+    }
+  ],
+  "topbarCtaButton": {
+    "name": "Download",
+    "url": "https://github.com/theblackturtle/mutafuzz/releases"
+  },
+  "navigation": [
+    {
+      "group": "Getting Started",
+      "pages": [
+        "introduction",
+        "installation",
+        "quickstart",
+        "faq"
+      ]
+    },
+    {
+      "group": "Usage Modes",
+      "icon": "rocket-launch",
+      "pages": [
+        "modes/index",
+        "modes/single-request",
+        "modes/multiple-requests",
+        "modes/empty-panel"
+      ]
+    },
+    {
+      "group": "Python Scripting",
+      "icon": "python",
+      "pages": [
+        "scripting/index",
+        "scripting/template-structure",
+        "scripting/api-reference",
+        "scripting/examples",
+        "scripting/learn-mode"
+      ]
+    },
+    {
+      "group": "Other Components",
+      "icon": "boxes-stacked",
+      "pages": [
+        "dashboard",
+        {
+          "group": "Request Table",
+          "icon": "table",
+          "pages": [
+            "request-table/index",
+            "request-table/filtering",
+            "request-table/custom-columns",
+            "request-table/ignore-requests"
+          ]
+        }
+      ]
+    }
+  ],
+  "footerSocials": {
+    "github": "https://github.com/theblackturtle/mutafuzz",
+    "twitter": "https://x.com/thebl4ckturtle"
+  },
+  "analytics": {
+    "ga4": {
+      "measurementId": "G-VM9R15K1N0"
+    }
+  }
+}

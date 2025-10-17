@@ -1,0 +1,223 @@
+---
+title: 'Custom Columns'
+description: 'Add Boolean and Regex columns to extract and analyze data'
+sidebarTitle: 'Custom Columns'
+icon: 'table-columns'
+---
+
+# Custom Columns
+
+Add custom columns to the Request Table to extract or compute values from requests and responses.
+
+## Column Types
+
+### Boolean Columns
+
+<img src="/images/custom-columns-boolean.png" alt="Boolean Columns" />
+
+**How to Add:**
+
+1. Open **Manage Table Columns** dialog (toolbar button)
+2. Click **Add** → **Boolean Column...**
+3. Enter **Column Name** (must start with letter or underscore)
+4. Write **Boolean Expression** (uses filter syntax)
+5. Set **Preferred Width** (50-200 pixels, default: 80)
+6. Click **OK**
+
+<Warning>
+Column names must start with letter or underscore:
+- ✓ Valid: `MyColumn`, `_Column1`, `My Column 123`
+- ✗ Invalid: `1Column`, `123Test`
+</Warning>
+
+**Expression Syntax:**
+
+Boolean expressions use the same syntax as table filters. See [Filter Syntax Reference](/request-table/filtering) for complete documentation.
+
+**Examples:**
+
+```text
+# Check for POST requests
+Request.Method == 'POST'
+
+# Check for errors
+Response.Status >= 400
+
+# Check for slow responses
+Response.ResponseTime > 1000
+
+# Check for JSON content
+Response.ContentType CONTAINS 'json'
+
+# Combined conditions
+Response.Status >= 200 AND Response.Status < 300 AND Request.Url CONTAINS '/api/'
+```
+
+### Regex Columns
+
+Extract text using regular expression patterns with capture groups.
+
+<img src="/images/custom-columns-regex.png" alt="Regex Columns" />
+
+**How to Add:**
+
+1. Open **Manage Table Columns** dialog
+2. Click **Add** → **Regex Column...**
+3. Enter **Column Name**
+4. Select **Extract From** (Request.Url, Request.Body, Response.Body, etc.)
+5. Enter **Regex Pattern** (case-insensitive)
+6. Select **Capture Group** (0 = full match, 1+ = capture groups)
+7. Set **Preferred Width** (50-500 pixels, default: 150)
+8. **(Optional)** Test pattern using built-in tester
+9. Click **OK**
+
+**Pattern Tester:**
+
+The dialog includes a tester below the main fields:
+
+1. Enter sample text in **Sample Input**
+2. Click **Test Pattern** button
+3. View **Result** label:
+   - Green text = match found, shows extracted value
+   - Red text = error or no match
+
+<Tip>
+Always test your pattern before clicking OK. The tester shows exactly what will appear in table cells.
+</Tip>
+
+<Warning>
+If capture group number exceeds the pattern's group count, cells will be empty.
+
+Example: Pattern `/api/v(\d+)/` has 1 capture group. Setting capture group to 2 results in empty cells.
+</Warning>
+
+**Examples:**
+
+**Extract domain:**
+```
+Pattern: https?://([^/]+)
+Capture Group: 1
+
+Input: https://example.com/api/users
+Result: example.com
+```
+
+**Extract the API version:**
+```
+Pattern: /api/v(\d+)/
+Capture Group: 1
+
+Input: https://api.example.com/v2/users
+Result: 2
+```
+
+**Extract user ID:**
+```
+Pattern: /users/(\d+)
+Capture Group: 1
+
+Input: https://example.com/users/12345/profile
+Result: 12345
+```
+
+**Extract JSON value:**
+```
+Pattern: "user_id"\s*:\s*"([^"]+)"
+Capture Group: 1
+
+Input: {"user_id":"abc123","name":"test"}
+Result: abc123
+```
+
+**Extract session ID:**
+```
+Pattern: JSESSIONID=([A-Z0-9]+)
+Capture Group: 1
+
+Input: Cookie: JSESSIONID=ABCD1234; Path=/
+Result: ABCD1234
+```
+
+**Extract file extension:**
+```
+Pattern: \.([a-z]+)(?:\?|$)
+Capture Group: 1
+
+Input: /download/file.pdf?version=1
+Result: pdf
+```
+
+<Note>
+**Capture Group 0 vs 1+:**
+- Group `0` = entire match
+- Group `1+` = text inside parentheses
+
+Example pattern: `https?://([^/]+)/(.*)`:
+- Group `0`: `https://example.com/api/users`
+- Group `1`: `example.com`
+- Group `2`: `api/users`
+</Note>
+
+
+## Using Custom Columns in Filters
+
+Reference custom columns in filter expressions using bracket notation:
+
+```text
+[ColumnName] operator value
+```
+
+**Boolean Column Examples:**
+
+```text
+[HasAuth] == true
+[HasAuth]
+NOT [HasAuth]
+[HasAuth] AND [IsJSON]
+```
+
+**Regex Column Examples:**
+
+```text
+[APIVersion] == '2'
+[UserID] != ''
+[Domain] CONTAINS 'example'
+[SessionID] MATCHES '[A-F0-9]{32}'
+```
+
+**Combined Examples:**
+
+```text
+[HasAuth] AND [APIVersion] == '2'
+NOT [HasAuth] AND Response.Status == 401
+[Domain] == 'example.com' OR [Domain] == 'test.com'
+```
+
+<Tip>
+Custom columns make filters more readable:
+
+**Before:**
+```text
+Response.Status >= 200 AND Response.Status < 300 AND Response.ResponseTime > 1000
+```
+
+**After:**
+```text
+[SlowSuccess] == true
+```
+
+Create Boolean columns for frequently-used checks.
+</Tip>
+
+See the [Filter Syntax](/request-table/filtering) guide for complete documentation.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Filter Syntax" icon="filter" href="/request-table/filtering">
+    Learn filter expression operators
+  </Card>
+  <Card title="Ignore Requests" icon="eye-slash" href="/request-table/ignore-requests">
+    Smart response fingerprinting
+  </Card>
+</CardGroup>

@@ -1,0 +1,108 @@
+---
+title: Filtering Requests
+description: Filter requests using simple query syntax
+icon: "filter"
+---
+
+# Filtering Requests
+
+Type filter expressions in the filter box to show only matching requests.
+
+## Quick Examples
+
+```text
+Response.Status == 200
+Request.Method == 'POST'
+Response.Body CONTAINS 'error'
+Response.ResponseTime > 1000
+Request.Url MATCHES '.*\.php$'
+```
+
+## Operators
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `==` or `=` | Equal | `Request.Method == 'GET'` |
+| `!=` | Not equal | `Response.Status != 200` |
+| `>` | Greater than | `Response.ResponseTime > 500` |
+| `<` | Less than | `Response.ContentLength < 1000` |
+| `>=` | Greater or equal | `Response.Status >= 400` |
+| `<=` | Less or equal | `Response.ResponseTime <= 500` |
+| `CONTAINS` | Contains text | `Response.Body CONTAINS 'error'` |
+| `MATCHES` | Regex match | `Request.Url MATCHES '.*\.json$'` |
+| `IN` | In list | `Request.Method IN ['POST', 'PUT']` |
+
+## Common Fields
+
+**Request Fields:**
+- `Request.Method` - HTTP method (GET, POST, etc.)
+- `Request.Url` - Request URL
+- `Request.Body` - Request body (as UTF-8 text)
+
+**Response Fields:**
+- `Response.Status` - HTTP status code
+- `Response.Body` - Response body (as UTF-8 text)
+- `Response.ContentLength` - Response size in bytes
+- `Response.ResponseTime` - Response time in milliseconds
+- `Response.ContentType` - Content-Type header
+
+## Combining Filters
+
+Use `AND`/`OR`/`NOT` to combine (must use parentheses):
+
+```text
+(Response.Status == 200) AND (Response.ResponseTime > 500)
+(Request.Method == 'POST') OR (Request.Method == 'PUT')
+NOT (Response.Status == 404)
+```
+
+Cannot mix `AND`/`OR` without parentheses:
+
+```text
+# Wrong - will error
+Response.Status == 200 AND Response.ResponseTime > 500 OR Request.Method == 'POST'
+
+# Right - use parentheses
+(Response.Status == 200 AND Response.ResponseTime > 500) OR (Request.Method == 'POST')
+```
+
+## Filter Examples
+
+**Status codes:**
+```text
+Response.Status >= 400
+Response.Status IN [200, 201, 204]
+```
+
+**Response time:**
+```text
+Response.ResponseTime > 1000
+(Response.ResponseTime > 500) AND (Response.Status == 200)
+```
+
+**Content type:**
+```text
+Response.ContentType == 'application/json'
+Response.ContentType CONTAINS 'json'
+```
+
+**URL patterns:**
+```text
+Request.Url CONTAINS '/api/'
+Request.Url MATCHES '^/api/v[0-9]+/users$'
+```
+
+**Custom columns:**
+```text
+[IsJSON] == true
+[HasAuth] == true AND Response.Status == 401
+```
+
+## Tips
+
+- Strings use single quotes: `'POST'`
+- Regex patterns use double quotes: `".*\.php$"`
+- Field names are case-insensitive
+- Byte arrays (`Request.Body`, `Response.Body`) automatically converted to UTF-8 strings
+
+That's it. Simple filtering.

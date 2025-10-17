@@ -1,0 +1,34 @@
+---
+title: Usage Modes
+description: MutaFuzz offers three modes for different fuzzing scenarios
+sidebarTitle: Overview
+icon: "grid-2"
+---
+
+# Usage Modes
+
+MutaFuzz provides three distinct modes, each optimized for different fuzzing workflows:
+
+<CardGroup cols={3}>
+  <Card title="Single Request" href="/modes/single-request" icon="crosshairs">
+    Fuzz one HTTP request with `%s` placeholders
+  </Card>
+  <Card title="Multiple Requests" href="/modes/multiple-requests" icon="list">
+    Send requests from Proxy History/Logger/Target
+  </Card>
+  <Card title="Empty Panel" href="/modes/empty-panel" icon="code">
+    Build requests programmatically
+  </Card>
+</CardGroup>
+
+## Quick Comparison
+
+**Single Request** - Select text in any Burp request, press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>5</kbd>, and fuzz it immediately. Best for quick parameter testing.
+
+**Multiple Requests** - Select multiple requests from Proxy History and send them all to MutaFuzz. Best for batch testing and analyzing application flows.
+
+**Empty Panel** - Start with a blank panel and build requests using Python and the Burp API. Best for advanced automation and custom fuzzing algorithms.
+
+<Info>
+Choose the mode that fits your workflow. You can use different modes for different tasks.
+</Info>

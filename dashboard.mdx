@@ -1,0 +1,98 @@
+---
+title: Dashboard
+description: Manage all your fuzzer instances in one place
+icon: "gauge-high"
+---
+
+The Dashboard provides centralized control of all your fuzzer instances. Start, stop, pause, delete, and view results from a single interface.
+
+## Opening Dashboard
+
+Navigate to: **Extensions → MutaFuzz → Dashboard tab**
+
+## Layout
+
+The Dashboard has two panels:
+
+**Top Panel: Fuzzer Table**
+- Lists all your fuzzer instances
+- Shows ID, name, status, and progress
+- Select fuzzers to control them
+
+**Bottom Panel: Results Table**
+- Shows HTTP requests/responses from selected fuzzers
+- Updates when you select fuzzers above
+- Same format as individual fuzzer results
+
+## Fuzzer Table
+
+### Columns
+
+| Column | Description |
+|--------|-------------|
+| # | Fuzzer ID (1, 2, 3...) |
+| Name | Auto-generated name (Fuzz-abc123) |
+| Result | Number of interesting results |
+| Error | Number of errors encountered |
+| Process | Progress (e.g., 450/1000) |
+| State | Running, Paused, or Stopped |
+
+## Operations
+
+### Single Fuzzer Selection
+
+**Selecting:**
+- Click any row to select it
+- Double-click row → Opens fuzzer window
+
+**Context Menu:**
+- Start (if stopped or not started)
+- Pause (if running)
+- Stop (if running or paused)
+- Delete (if stopped)
+- Open Fuzzer Window
+
+### Multiple Selection
+
+**Selecting:**
+- <kbd>Ctrl</kbd> + **Click**: Add individual fuzzer to selection
+- <kbd>Shift</kbd> + **Click**: Select range
+- <kbd>Ctrl</kbd> + <kbd>A</kbd>: Select all fuzzers
+
+**Context Menu:**
+- Start Selected
+- Pause Selected
+- Stop Selected
+- Delete Selected
+
+## Results Panel
+
+The bottom panel shows results from selected fuzzers:
+
+**Single fuzzer selected:**
+- Shows all requests/responses from that fuzzer
+- Same functionality as individual fuzzer results table
+
+**Multiple fuzzers selected:**
+- Shows combined results from all selected fuzzers
+- Useful for comparing findings across multiple tests
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Usage Modes" icon="play" href="/modes">
+    Learn the three ways to start fuzzing
+  </Card>
+
+  <Card title="Request Table" icon="table" href="/request-table/filtering">
+    Master the results table features
+  </Card>
+
+  <Card title="Python Scripting" icon="code" href="/scripting">
+    Control fuzzers with Python scripts
+  </Card>
+
+  <Card title="API Reference" icon="book" href="/scripting/api-reference">
+    Complete Python API documentation
+  </Card>
+</CardGroup>

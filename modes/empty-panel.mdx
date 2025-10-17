@@ -1,0 +1,147 @@
+---
+title: Empty Panel
+description: Build requests programmatically using Python and Burp API
+sidebarTitle: Empty Panel
+icon: "file-code"
+---
+
+# Empty Panel
+
+Start with a blank panel for advanced custom scripting. Build requests from scratch using the Burp API. This mode is best for custom fuzzing algorithms and advanced automation.
+
+## How to Use
+
+1. Navigate to **MutaFuzz → Dashboard** tab
+2. Click **"New Empty Panel"** button
+3. Empty fuzzer opens
+4. Write custom Python script
+5. Build requests programmatically
+
+## Example: Build HTTP Request from URL
+
+Build a GET request from a URL string:
+
+```python
+# Build request using Burp API
+url = "https://httpbin.org/anything"
+req = utils.http_request_from_url(url)
+
+# Add custom headers
+req = req.withHeader("User-Agent", "CustomFuzzer/1.0")
+req = req.withHeader("Authorization", "Bearer token")
+
+# Send request
+fuzz.http_request(req).queue()
+fuzz.done()
+```
+
+<Tip>
+Use `utils.http_request_from_url(url)` to build requests from URL strings. Then use Burp API methods like `.withHeader()` to modify them.
+</Tip>
+
+## Example: API Fuzzing
+
+Fuzz multiple API endpoints with ID parameters:
+
+```python
+base_url = "http://api.example.com"
+endpoints = ["/users/{id}", "/posts/{id}", "/comments/{id}"]
+
+for endpoint in endpoints:
+    for resource_id in range(1, 100):
+        # Build URL
+        path = endpoint.format(id=resource_id)
+        url = f"{base_url}{path}"
+
+        # Build request from URL
+        req = utils.http_request_from_url(url)
+        req = req.withHeader("Authorization", "Bearer token")
+
+        # Queue request
+        fuzz.http_request(req).queue()
+
+fuzz.done()
+```
+
+## Example: POST Request with JSON Body
+
+Build POST requests with custom bodies:
+
+```python
+url = "https://api.example.com/users"
+
+# Build base request
+req = utils.http_request_from_url(url)
+
+# Change method to POST
+req = req.withMethod("POST")
+
+# Add headers
+req = req.withHeader("Content-Type", "application/json")
+req = req.withHeader("Authorization", "Bearer token")
+
+# Add JSON body
+payloads = [
+    '{"username":"admin","password":"admin"}',
+    '{"username":"admin\' OR 1=1--","password":"x"}',
+    '{"username":"admin","password":"x\' OR \'1\'=\'1"}',
+]
+
+for payload in payloads:
+    req_with_body = req.withBody(payload)
+    fuzz.http_request(req_with_body).queue()
+
+fuzz.done()
+```
+
+## Example: Number Range Fuzzing
+
+Generate numeric sequences:
+
+```python
+url = "https://example.com/api/user/{id}"
+
+# Zero-padded IDs (001, 002, 003, ...)
+for num in range(0, 100):
+    payload = str(num).zfill(3)  # "005"
+    target_url = url.format(id=payload)
+
+    req = utils.http_request_from_url(target_url)
+    fuzz.http_request(req).queue()
+
+fuzz.done()
+```
+
+## Example: Custom Response Handler
+
+Process responses and extract data:
+
+```python
+@filter.status([200])
+def handle_response(req):
+    body = req.response
+
+    # Extract data from response
+    if "user_id" in body:
+        # Custom processing logic
+        table.add(req)
+```
+
+## When to Use
+
+- Building requests programmatically
+- Complex multi-step workflows
+- Custom fuzzing algorithms
+- API fuzzing with dynamic parameters
+- Advanced automation scenarios
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Scripting Guide" href="/scripting" icon="code">
+    Learn the complete Python API
+  </Card>
+  <Card title="Example Scripts" href="/scripting/examples" icon="book">
+    Copy-paste ready examples
+  </Card>
+</CardGroup>

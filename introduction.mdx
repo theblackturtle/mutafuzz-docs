@@ -1,0 +1,161 @@
+---
+title: "What is MutaFuzz?"
+description: "Mutation-driven HTTP fuzzing for Burp Suite"
+icon: "house"
+---
+
+<div align="center">
+  <img src="/images/mutafuzz-logo.png" alt="MutaFuzz - Python-scriptable fuzzer for Burp Suite"/>
+</div>
+
+## Overview
+
+MutaFuzz is a powerful Burp Suite extension that brings **Python scripting** to HTTP fuzzing. Built on the Montoya API, it provides a flexible, programmable fuzzing framework perfect for bug bounty hunting, penetration testing, and security research.
+
+<CardGroup cols={2}>
+  <Card title="Python Scripting" icon="code">
+    Write fuzzing logic in Python with full access to Burp's Montoya API
+  </Card>
+  <Card title="Learn Mode" icon="brain">
+    Automatically filter duplicate responses to surface only interesting results
+  </Card>
+  <Card title="Request Table" icon="table">
+    Advanced filtering, custom columns, and result management
+  </Card>
+  <Card title="Multi-Instance" icon="grid-2">
+    Run multiple fuzzing sessions simultaneously from a unified dashboard
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Python-Powered Fuzzing
+
+Unlike traditional fuzzing tools with limited scripting capabilities, MutaFuzz gives you the full power of Python:
+
+- **Fluent API**: Chain methods for readable, maintainable scripts
+- **Response Callbacks**: Process results with custom Python functions
+- **Decorators**: Stack filters to build complex logic (`@filter.status([200])`)
+- **Full Montoya Access**: Direct access to Burp's complete API
+
+```python
+@filter.status([200])
+@filter.interesting()
+def handle_response(req):
+    if "admin" in req.text:
+        table.add(req)
+```
+
+### Intelligent Learn Mode
+
+Learn mode analyzes baseline responses to automatically filter out noise:
+
+1. **Calibration Phase**: Send random payloads to establish baselines
+2. **Pattern Detection**: Identify response variations by status, length, body hash
+3. **Smart Filtering**: Only surface responses that differ from learned patterns
+4. **Group-Based**: Multiple learn groups for different payload types
+
+<Tip>
+  Learn mode drastically reduces false positives when fuzzing for hidden
+  endpoints, parameters, or vulnerabilities.
+</Tip>
+
+### Usage Modes
+
+MutaFuzz adapts to your workflow with three distinct modes:
+
+<CardGroup cols={3}>
+  <Card title="Selection Mode" icon="i-cursor">
+    Select text in HTTP editor → right-click → fuzz with markers
+  </Card>
+  <Card title="Request Mode" icon="file-lines">
+    Send complete HTTP requests to fuzz with custom scripts
+  </Card>
+  <Card title="Empty Mode" icon="square">
+    Pure Python-driven fuzzing without pre-defined templates
+  </Card>
+</CardGroup>
+
+## Use Cases
+
+### Bug Bounty Hunting
+
+- Fuzz for hidden endpoints with learn mode filtering
+- Test parameter injection with custom transformations
+- Chain requests for multi-step exploitation
+- Session-aware testing with `session.set()` API
+
+### Penetration Testing
+
+- Automate repetitive fuzzing tasks with Python
+- Custom authentication flows via scripting
+- Bypass WAF detection with randomized payloads
+- Generate comprehensive reports from results table
+
+### Security Research
+
+- Prototype new fuzzing techniques quickly
+- Analyze response patterns with full API access
+- Test complex scenarios requiring stateful logic
+- Export results for further analysis
+
+## Quick Example
+
+Here's a complete fuzzing script that demonstrates MutaFuzz's power:
+
+```python
+@filter.status([200])
+@filter.interesting()
+def handle_response(req):
+    """Only show 200 OK responses marked interesting by learn mode"""
+    table.add(req)
+
+def queue_tasks():
+    # Calibration: establish baseline responses
+    for i in range(3):
+        random_path = utils.randstr(length=8)
+        fuzz.payloads([random_path]).learn_group(1).queue()
+
+    # Fuzz with wordlist
+    for word in payloads.wordlist(1):
+        fuzz.payloads([word]).queue()
+
+    fuzz.done()
+```
+
+<Note>
+  Learn mode (`.learn_group(1)`) automatically filters responses, showing only
+  those that differ from calibration baselines.
+</Note>
+
+## Requirements
+
+- Burp Suite Professional (2025.3 or later)
+
+<Warning>
+  MutaFuzz requires Burp Suite Professional. It will not work with Burp Suite
+  Community Edition.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Installation" icon="download" href="/installation">
+    Install the extension and get started
+  </Card>
+  <Card title="Quick Start" icon="play" href="/quickstart">
+    Your first fuzzing session in 5 minutes
+  </Card>
+  <Card title="Python Scripting" icon="code" href="/scripting">
+    Learn the Python API and scripting patterns
+  </Card>
+  <Card title="Learn Mode" icon="brain" href="/scripting/learn-mode">
+    Master intelligent response filtering
+  </Card>
+</CardGroup>
+
+## Support
+
+- **Author**: [@thebl4ckturtle](https://x.com/thebl4ckturtle)
+- **GitHub**: [github.com/theblackturtle/mutafuzz](https://github.com/theblackturtle/mutafuzz)
+- **Version**: 1.0.0

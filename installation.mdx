@@ -1,0 +1,185 @@
+---
+title: "Installation"
+description: "Install MutaFuzz extension in Burp Suite Professional"
+icon: "download"
+---
+
+## Prerequisites
+
+Before installing MutaFuzz, ensure you have:
+
+<CardGroup cols={2}>
+  <Card title="Burp Suite Pro" icon="/logo/burpsuite.svg">
+    Version 2025.3 or later with Montoya API support
+  </Card>
+  <Card title="Java 21+" icon="java">
+    Required for Burp Suite and Jython runtime
+  </Card>
+</CardGroup>
+
+<Warning>
+MutaFuzz requires **Burp Suite Professional**. The Community Edition lacks Montoya API support and cannot run this extension.
+</Warning>
+
+## Download Extension
+
+### Option 1: GitHub Releases (Recommended)
+
+1. Visit the [MutaFuzz Releases](https://github.com/theblackturtle/mutafuzz/releases) page
+2. Download the latest `mutafuzz-vX.Y.Z.jar` file
+3. Save to a memorable location (e.g., `~/burp-extensions/`)
+
+### Option 2: Build from Source
+
+```bash
+# Clone repository
+git clone https://github.com/theblackturtle/mutafuzz.git
+cd mutafuzz
+
+# Build with Gradle
+./gradlew build
+
+# JAR will be in build/libs/
+ls build/libs/mutafuzz-*.jar
+```
+
+<Note>
+Building from source requires Java 21+ and Gradle. The built JAR includes all dependencies.
+</Note>
+
+## Install in Burp Suite
+
+### Step 1: Open Extensions Panel
+
+1. Launch Burp Suite Professional
+2. Navigate to **Extensions** tab (top menu)
+3. Click **Installed** sub-tab
+
+
+### Step 2: Add Extension
+
+1. Click **Add** button (bottom of panel)
+2. In the "Extension Details" dialog:
+   - **Extension type**: Select "Java"
+   - **Extension file**: Click "Select file..." and choose `mutafuzz-vX.Y.Z.jar`
+3. Click **Next**
+
+
+### Step 3: Verify Installation
+
+Watch the **Output** and **Errors** tabs at the bottom:
+
+**Success Output:**
+```text
+Initializing MutaFuzz v1.0.0 by @thebl4ckturtle
+```
+
+<img src="/images/verify-extension.png" alt="Extension verification" />
+
+**Common Errors:**
+
+<AccordionGroup>
+  <Accordion title="ClassNotFoundException or NoClassDefFoundError">
+    Your JAR may be corrupted or incomplete. Re-download from GitHub releases.
+  </Accordion>
+
+  <Accordion title="UnsupportedClassVersionError">
+    Your Java version is too old. Upgrade to Java 21 or later.
+  </Accordion>
+
+  <Accordion title="Montoya API not found">
+    Update Burp Suite to version 2025.3 or later, which includes Montoya API.
+  </Accordion>
+</AccordionGroup>
+
+### Step 4: Access MutaFuzz Tab
+
+Once installed, a new **MutaFuzz** tab appears in Burp's main menu:
+
+1. Click **MutaFuzz** tab (next to Extensions, Target, etc.)
+2. You should see the Dashboard with an empty fuzzer instances table
+
+<img src="/images/mutafuzz-dashboard-empty.png" alt="MutaFuzz Dashboard on first launch" />
+
+<Tip>
+The dashboard is where you'll manage all your fuzzing sessions. Pin it as a favorite tab for quick access.
+</Tip>
+
+## Configuration
+
+### Script Directory
+
+By default, MutaFuzz includes built-in scripts. To use custom scripts:
+
+1. Create a directory for your scripts (e.g., `~/mutafuzz-scripts/`)
+2. In MutaFuzz dashboard, click **Settings**
+3. Set "Script Directory" to your custom path
+4. Scripts in this directory will appear in the script dropdown
+
+<Tip>
+Custom scripts override built-in scripts with the same name. Prefix with numbers (e.g., `010_my_script.py`) to control sort order.
+</Tip>
+
+## Update Extension
+
+To update to a new version:
+
+1. Download the latest JAR from GitHub releases
+2. In Burp, go to **Extensions > Installed**
+3. Select "MutaFuzz" and reload
+
+<Note>
+Active fuzzing sessions will be terminated when removing the extension. Save any important results first.
+</Note>
+
+## Troubleshooting
+
+### Extension Won't Load
+
+**Check Burp Version:**
+1. Help > About Burp Suite
+2. Verify version is 2025.3 or later
+3. Check "Montoya API" is listed in features
+
+### Extension Loads but Crashes
+
+**Check Logs:**
+1. Extensions > MutaFuzz > Errors tab
+2. Look for stack traces
+3. Report issues to GitHub with full error output
+
+**Common Fixes:**
+- Increase JVM heap size: `java -Xmx4g -jar burpsuite_pro.jar`
+- Disable other extensions that might conflict
+
+### Context Menu Missing
+
+1. Verify extension shows as "Loaded" in Extensions panel
+2. Check no errors in Errors tab
+3. Try unloading and reloading the extension
+4. Restart Burp Suite
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="play" href="/quickstart">
+    Complete your first fuzzing session
+  </Card>
+  <Card title="Python Scripting" icon="code" href="/scripting">
+    Learn to write custom fuzzing scripts
+  </Card>
+  <Card title="Usage Modes" icon="arrows-split-up-and-left" href="/modes">
+    Understand the three fuzzing modes
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/faq">
+    Resolve common issues
+  </Card>
+</CardGroup>
+
+## Support
+
+Having issues? Get help:
+
+- **GitHub Issues**: [Report bugs or request features](https://github.com/theblackturtle/mutafuzz/issues)
+- **Twitter**: [@thebl4ckturtle](https://x.com/thebl4ckturtle)
+- **Documentation**: [Full troubleshooting guide](/faq)

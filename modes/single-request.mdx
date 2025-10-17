@@ -1,0 +1,155 @@
+---
+title: Single Request
+description: Fuzz single HTTP requests with %s placeholders
+sidebarTitle: Single Request
+icon: "bullseye"
+---
+
+# Single Request
+
+Select text in any Burp request and fuzz it with the `%s` placeholder. This mode is best for quick parameter testing and learning MutaFuzz basics.
+
+## How to Use
+
+1. Navigate to any request in Burp (Repeater, Proxy History, etc.)
+2. Select the text you want to fuzz
+3. Press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>5</kbd> (or right-click → "Open MutaFuzz")
+4. Fuzzer opens with `%s` where your selection was
+
+## Example: Query Parameter Fuzzing
+
+Original request:
+```http
+GET /search?q=test&page=1 HTTP/1.1
+Host: example.com
+```
+
+Select "test", press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>5</kbd>. Template becomes:
+```http
+GET /search?q=%s&page=1 HTTP/1.1
+Host: example.com
+```
+
+Script:
+```python
+# SQLi testing
+sqli_payloads = ["' OR 1=1--", "admin' --", "1' UNION SELECT NULL--"]
+
+for payload in sqli_payloads:
+    fuzz.payloads([payload]).queue()
+
+fuzz.done()
+```
+
+<Tip>
+The `%s` placeholder is automatically replaced with each payload. You MUST call `fuzz.done()` at the end.
+</Tip>
+
+## Example: Path Component Fuzzing (IDOR)
+
+Original request:
+```http
+GET /api/v1/users/123 HTTP/1.1
+Host: example.com
+Authorization: Bearer token
+```
+
+Select "123", press <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>5</kbd>. Template becomes:
+```http
+GET /api/v1/users/%s HTTP/1.1
+Host: example.com
+Authorization: Bearer token
+```
+
+Script:
+```python
+# IDOR testing
+for user_id in range(1, 1000):
+    fuzz.payloads([str(user_id)]).queue()
+
+fuzz.done()
+```
+
+## Example: Multiple Placeholders
+
+You can add multiple `%s` placeholders manually:
+```http
+GET /api/user/%s/post/%s HTTP/1.1
+Host: example.com
+Cookie: session=%s
+```
+
+Script:
+```python
+users = ["alice", "bob", "charlie"]
+posts = ["1", "2", "3"]
+sessions = ["valid_token", "expired_token"]
+
+for user in users:
+    for post in posts:
+        for session in sessions:
+            # IMPORTANT: Order matches placeholder order
+            fuzz.payloads([user, post, session]).queue()
+
+fuzz.done()
+```
+
+<Warning>
+When using multiple `%s` placeholders, the order of payloads in `fuzz.payloads([...])` must match the order of placeholders in the template.
+</Warning>
+
+## Example: With Learn Mode
+
+Learn mode filters out expected responses and only shows interesting ones:
+
+```python
+# Calibration: Teach what "normal" looks like
+for i in range(6, 12, 3):
+    # Random string baseline
+    payload = utils.randstr(length=i)
+    fuzz.payloads([payload]).learn_group(1).queue()
+
+# Fuzzing: Learn mode filters responses
+for payload in sqli_payloads:
+    fuzz.payloads([payload]).queue()
+
+fuzz.done()
+```
+
+## Response Filtering
+
+Filter responses using decorators:
+
+```python
+# Only add interesting responses to table
+@filter.interesting()
+def handle_response(req):
+    table.add(req)
+```
+
+Other available filters:
+```python
+@filter.status([200, 201])           # Specific status codes
+@filter.status_not([404, 500])       # Exclude status codes
+@filter.contains("admin", "panel")   # Body contains strings
+@filter.matches(r"error|warning")    # Regex match
+@filter.length_range(min=1000)       # Response size
+```
+
+## When to Use
+
+- You have a specific parameter to fuzz
+- Quick testing of query params, headers, cookies
+- Single endpoint focus
+- Learning MutaFuzz basics
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Multiple Requests" href="/modes/multiple-requests" icon="list">
+    Send requests from Proxy History
+  </Card>
+  <Card title="Scripting Guide" href="/scripting" icon="code">
+    Learn the complete Python API
+  </Card>
+</CardGroup>

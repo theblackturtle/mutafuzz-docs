@@ -1,0 +1,725 @@
+---
+title: Examples
+description: Real-world MutaFuzz Python scripts demonstrating common fuzzing patterns and workflows
+keywords: [examples, scripts, patterns, fuzzing, workflow, tutorial, code, samples]
+icon: "code"
+---
+
+# Examples
+
+Real-world examples demonstrating common fuzzing patterns with MutaFuzz's Python API.
+
+## Example Categories
+
+<CardGroup cols={3}>
+  <Card title="Beginner" icon="circle-1" color="#4CAF50">
+    Simple patterns for getting started
+  </Card>
+  <Card title="Intermediate" icon="circle-2" color="#FF9800">
+    Learn mode, parameter injection, chaining
+  </Card>
+  <Card title="Advanced" icon="circle-3" color="#F44336">
+    State machines, batch processing, complex workflows
+  </Card>
+</CardGroup>
+
+---
+
+# Beginner Examples
+
+Start here if you're new to MutaFuzz scripting.
+
+## 1. Simple URL Fuzzing
+
+Fuzz a list of URLs from wordlist 1.
+
+<CodeGroup>
+```python 001_simple_url_fuzzing.py
+"""
+Simple URL Fuzzing
+
+Get URLs from Wordlist Panel 1, request each URL, add responses to table.
+Example: Wordlist Panel 1 = [https://example.com/admin, https://example.com/api]
+"""
+
+
+# Response Handler - Uncomment filters as needed
+# @filter.contains("admin", "panel")
+# @filter.interesting()
+# @filter.length_range(min=1000, max=5000)
+# @filter.matches(r"error|warning", ignore_case=True)
+# @filter.status([200, 201, 202])
+# @filter.status_not([404, 500])
+def handle_response(req):
+    """Add response to request table if it passes interesting filter."""
+    table.add(req)
+
+
+def queue_tasks():
+    """Get URLs from Wordlist Panel 1 and request each one."""
+    for url in payloads.wordlist(1):
+        fuzz.url(url).queue()
+
+    fuzz.done()
+```
+</CodeGroup>
+
+**Key concepts:**
+- Simple `.queue()` for async execution
+- Filter decorators commented out (uncomment as needed)
+- `table.add(req)` adds all responses to results
+
+**Use cases:**
+- Directory/file discovery
+- API endpoint enumeration
+- Subdomain validation
+
+---
+
+## 2. Number Range Fuzzing
+
+Fuzz numeric parameters with generated ranges.
+
+<CodeGroup>
+```python 002_number_range_fuzzing.py
+"""
+Number Range Fuzzing
+
+Generate number ranges and fuzz numeric parameters.
+Example: Test /api/user?id=[1-1000]
+"""
+
+def queue_tasks():
+    """Generate and fuzz number ranges."""
+    base_url = "https://example.com/api/user?id="
+
+    # Small range (1-100)
+    for i in range(1, 101):
+        fuzz.url(base_url + str(i)).queue()
+
+    # Large range with step (1000-10000, step 100)
+    for i in range(1000, 10001, 100):
+        fuzz.url(base_url + str(i)).queue()
+
+    # Negative numbers
+    for i in range(-100, 1):
+        fuzz.url(base_url + str(i)).queue()
+
+    fuzz.done()
+
+
+@filter.status([200])
+@filter.interesting()
+def handle_response(req):
+    """Add interesting successful responses."""
+    table.add(req)
+```
+</CodeGroup>
+
+**Key concepts:**
+- Python's `range()` for number generation
+- String concatenation for URL building
+- Learn mode filters baseline responses (404, 403, etc.)
+
+**Use cases:**
+- IDOR (Insecure Direct Object Reference) testing
+- User enumeration
+- Sequential ID testing
+- Numeric parameter brute force
+
+---
+
+## 3. Custom HTTP Requests
+
+Build requests with Montoya API for full control.
+
+<CodeGroup>
+```python 003_custom_http_requests.py
+"""
+Build HTTP Request with Burp Suite API
+
+Build request from URL using Burp API, add custom headers, send request, add response to table.
+Example: Creates GET request to URL with custom User-Agent header
+"""
+
+
+# Response Handler - Uncomment filters as needed
+# @filter.contains("admin", "panel")
+# @filter.interesting()
+# @filter.length_range(min=1000, max=5000)
+# @filter.matches(r"error|warning", ignore_case=True)
+# @filter.status([200, 201, 202])
+# @filter.status_not([404, 500])
+def handle_response(req):
+    """Add response to request table."""
+    table.add(req)
+
+
+def queue_tasks():
+    """Build HTTP request from URL with Burp Suite API and send."""
+    url = "https://httpbin.org/anything"
+    req = utils.http_request_from_url(url)
+    req = req.withHeader("User-Agent", "CustomFuzzer/1.0")
+    fuzz.http_request(req).queue()
+    fuzz.done()
+```
+</CodeGroup>
+
+**Key concepts:**
+- `utils.http_request_from_url()` creates base request
+- `.withHeader()` adds/modifies headers
+- `.withBody()` sets request body
+- Full Montoya API control
+
+<Accordion title="More Montoya API examples">
+```python
+# POST with JSON body
+req = utils.http_request_from_url("https://api.example.com/users")
+req = req.withMethod("POST")
+req = req.withHeader("Content-Type", "application/json")
+req = req.withBody('{"username":"admin","password":"admin"}')
+fuzz.http_request(req).queue()
+
+# Custom headers
+req = utils.http_request_from_url("https://example.com/api")
+req = req.withHeader("Authorization", "Bearer token123")
+req = req.withHeader("X-API-Key", "secret123")
+req = req.withHeader("User-Agent", "CustomFuzzer/1.0")
+fuzz.http_request(req).queue()
+
+# Update parameters
+from burp.api.montoya.http.message.params import HttpParameter, HttpParameterType
+
+req = utils.http_request_from_url("https://example.com/page?id=1")
+req = req.withUpdatedParameters(
+    HttpParameter.parameter("id", "PAYLOAD", HttpParameterType.URL)
+)
+fuzz.http_request(req).queue()
+```
+</Accordion>
+
+**Use cases:**
+- Custom authentication headers
+- API testing with specific content types
+- Complex request construction
+- Non-standard HTTP methods
+
+---
+
+# Intermediate Examples
+
+Ready for more advanced patterns? Try these.
+
+## 4. Payload Injection with Learn Mode
+
+Default script demonstrating payload injection with automatic calibration.
+
+<CodeGroup>
+```python 004_payload_injection_learn_mode.py
+"""
+Default Fuzzing Script - Advanced payload generation with learn mode
+
+Supports battering ram mode, payload transformations, and automatic filtering
+of duplicate/expected responses using learn mode.
+"""
+
+import time
+from itertools import product
+
+# Configuration options for payload generation
+UPPERCASE = False
+LOWERCASE = False
+UPPER_FIRST_CHAR = False
+
+
+def get_marker_count():
+    """Count payload positions (%s) in current template."""
+    template_req = utils.get_current_template()
+    if template_req:
+        return template_req.toString().count("%s")
+    return 1  # Default: single position
+
+
+# Response Handler - Uncomment filters as needed
+# @filter.contains("admin", "panel")
+# @filter.interesting()
+# @filter.length_range(min=1000, max=5000)
+# @filter.matches(r"error|warning", ignore_case=True)
+# @filter.status([200, 201, 202])
+# @filter.status_not([404, 500])
+@filter.interesting()
+def handle_response(req):
+    """
+    Process interesting HTTP responses and add them to results table.
+
+    Args:
+        req: RequestObject with Jython property access (req.status, req.interesting, etc.)
+    """
+    table.add(req)
+
+
+def queue_tasks():
+    """
+    Queue fuzzing tasks with calibration and payload transformations.
+    """
+    # Collect configured wordlists
+    wordlists = []
+    if len(payloads.wordlist(1)) > 0:
+        wordlists.append(payloads.wordlist(1))
+    if len(payloads.wordlist(2)) > 0:
+        wordlists.append(payloads.wordlist(2))
+    if len(payloads.wordlist(3)) > 0:
+        wordlists.append(payloads.wordlist(3))
+
+    marker_count = get_marker_count()
+
+    # Calibration phase (learn groups 1-5)
+    # Learn mode automatically filters responses to show only interesting ones
+    for i in range(6, 12, 3):
+        # Learn group 1: random string
+        payload = utils.randstr(length=i)
+        fuzz.payloads([payload] * marker_count).learn_group(1).queue()
+
+        # Learn group 2: random with trailing slash
+        payload = utils.randstr(length=i) + "/"
+        fuzz.payloads([payload] * marker_count).learn_group(2).queue()
+
+        # Learn group 3: admin prefix
+        payload = "admin" + utils.randstr(length=i)
+        fuzz.payloads([payload] * marker_count).learn_group(3).queue()
+
+        # Learn group 4: .htaccess prefix
+        payload = ".htaccess" + utils.randstr(length=i)
+        fuzz.payloads([payload] * marker_count).learn_group(4).queue()
+
+        # Learn group 5: buffer overflow
+        payload = "A" * (1000 + i)
+        fuzz.payloads([payload] * marker_count).learn_group(5).queue()
+
+    time.sleep(0.5)
+
+    # Main fuzzing phase with payload transformations
+    if marker_count > 1:
+        # Battering ram mode: replicate each payload across all positions
+        all_payloads = []
+        for wordlist in wordlists:
+            all_payloads.extend(wordlist)
+
+        for payload in all_payloads:
+            # Apply transformations
+            if UPPERCASE:
+                payload = payload.upper()
+            elif LOWERCASE:
+                payload = payload.lower()
+            elif UPPER_FIRST_CHAR:
+                payload = payload.capitalize()
+
+            fuzz.payloads([payload] * marker_count).queue()
+    else:
+        # Normal mode: different payloads per position
+        for combination in product(*wordlists):
+            # Apply transformations
+            if UPPERCASE:
+                combination = [item.upper() for item in combination]
+            elif LOWERCASE:
+                combination = [item.lower() for item in combination]
+            elif UPPER_FIRST_CHAR:
+                combination = [item.capitalize() for item in combination]
+
+            fuzz.payloads(list(combination)).queue()
+
+    fuzz.done()
+```
+</CodeGroup>
+
+**Key concepts:**
+- Learn mode calibration with 5 groups (random, trailing slash, admin prefix, .htaccess, buffer overflow)
+- `@filter.interesting()` automatically filters baseline responses
+- Battering ram mode for multiple `%s` markers
+- Payload transformations (uppercase, lowercase, capitalize)
+
+**Use cases:**
+- General-purpose fuzzing
+- Path/parameter discovery
+- Vulnerability scanning
+
+---
+
+## 5. URL Parameter Injection
+
+Inject polyglot payloads into each URL parameter.
+
+<CodeGroup>
+```python 005_url_parameter_injection.py
+"""
+URL Parameter Polyglot Injection
+
+Inject polyglot payload into each URL parameter, send requests, add responses to table.
+Example: /page?id=1&name=test becomes /page?id=PAYLOAD&name=test (2 requests)
+"""
+
+from burp.api.montoya.http.message.params import HttpParameter, HttpParameterType
+
+# Manual URL encoding required (Burp Suite limitation)
+# https://github.com/PortSwigger/burp-extensions-montoya-api/issues/103
+PAYLOAD = encode.url("xsstest'\"<>\\")
+
+
+def queue_tasks():
+    """Inject PAYLOAD into each URL parameter from context menu templates."""
+    for req_resp in templates.all():
+        request = req_resp.request()
+
+        try:
+            all_params = request.parameters()
+            if not all_params:
+                continue
+
+            for param in all_params:
+                if param.type() == HttpParameterType.URL:
+                    modified_req = request.withUpdatedParameters(
+                        HttpParameter.parameter(param.name(), PAYLOAD, param.type())
+                    )
+                    fuzz.http_request(modified_req).queue()
+        except:
+            pass
+
+    fuzz.done()
+
+
+# Response Handler - Uncomment filters as needed
+# @filter.contains("admin", "panel")
+# @filter.interesting()
+# @filter.length_range(min=1000, max=5000)
+# @filter.matches(r"error|warning", ignore_case=True)
+# @filter.status([200, 201, 202])
+# @filter.status_not([404, 500])
+def handle_response(req):
+    """Add response to request table."""
+    table.add(req)
+```
+</CodeGroup>
+
+**Key concepts:**
+- Java interop with Montoya API (`HttpParameter`, `HttpParameterType`)
+- Template iteration with `templates.all()` (Multiple Requests mode)
+- Parameter modification with `.withUpdatedParameters()`
+- URL encoding with `encode.url()`
+
+**Use cases:**
+- XSS testing
+- SQL injection testing
+- Parameter pollution
+- Input validation testing
+
+---
+
+## 6. Synchronous Request Chaining
+
+Send requests sequentially, using response data from previous request.
+
+<CodeGroup>
+```python 006_synchronous_request_chaining.py
+"""
+Synchronous Send Chaining
+
+Send first request with .send(), wait for response, extract data, use in second .send().
+Example: Get UUID from /uuid, then send it as X-Request-ID header to /headers
+"""
+
+
+# Response Handler - Uncomment filters as needed
+# @filter.contains("admin", "panel")
+# @filter.interesting()
+# @filter.length_range(min=1000, max=5000)
+# @filter.matches(r"error|warning", ignore_case=True)
+# @filter.status([200, 201, 202])
+# @filter.status_not([404, 500])
+def handle_response(req):
+    """Add response to request table."""
+    table.add(req)
+
+
+def queue_tasks():
+    """Send two requests synchronously: extract data from first, use in second."""
+    import json
+
+    base_url = "https://httpbin.org"
+
+    # Step 1: Send first request and wait for response
+    req1 = utils.http_request_from_url(base_url + "/uuid")
+    resp1 = fuzz.http_request(req1).send()  # Blocks until response
+
+    # Step 2: Extract data from first response
+    data = json.loads(resp1.body)
+    request_id = data.get("uuid", "fallback-id")
+
+    # Step 3: Use extracted data in second request
+    req2 = utils.http_request_from_url(base_url + "/headers")
+    req2 = req2.withHeader("X-Request-ID", request_id)
+    resp2 = fuzz.http_request(req2).send()  # Blocks until response
+
+    # Step 4: Add to table if successful
+    if resp2.status == 200:
+        table.add(resp2)
+
+    fuzz.done()
+```
+</CodeGroup>
+
+**Key concepts:**
+- `.send()` blocks until response received
+- Extract data from `resp.body` (use `json.loads()` for JSON)
+- Chain requests: response 1 → request 2
+- `handle_response()` NOT called for `.send()` requests
+- Manual `table.add()` required
+
+**Use cases:**
+- Multi-step authentication flows
+- Session-based testing
+- CSRF token extraction
+- API workflow testing
+
+---
+
+# Advanced Examples
+
+Complex workflows for experienced users.
+
+## 7. Multi-Group Learn Mode
+
+Calibrate multiple baseline patterns simultaneously.
+
+<CodeGroup>
+```python 007_multi_group_learn_mode.py
+"""
+Multi-Group Learn Mode Calibration
+
+Use multiple learn groups to fingerprint different response patterns.
+Example: Differentiate between 404, 403, and 500 baseline responses
+"""
+
+def queue_tasks():
+    """Calibrate with multiple learn groups."""
+    base_url = "https://example.com/"
+
+    # Learn group 1: Non-existent paths (404 baseline)
+    for i in range(10):
+        fuzz.url(base_url + utils.randstr(16)).learn_group(1).queue()
+
+    # Learn group 2: Non-existent with extension (404 different?)
+    for i in range(5):
+        payload = utils.randstr(12) + ".php"
+        fuzz.url(base_url + payload).learn_group(2).queue()
+
+    # Learn group 3: Non-existent directories (404 trailing slash)
+    for i in range(5):
+        payload = utils.randstr(12) + "/"
+        fuzz.url(base_url + payload).learn_group(3).queue()
+
+    # Learn group 4: Buffer overflow attempts (500 baseline?)
+    for i in range(5):
+        payload = "A" * (1000 + i * 100)
+        fuzz.url(base_url + payload).learn_group(4).queue()
+
+    # Wait for calibration
+    utils.sleep(500)
+
+    # Main fuzzing - responses compared against ALL learn groups
+    for path in payloads.wordlist(1):
+        fuzz.url(base_url + path).queue()
+
+    fuzz.done()
+
+
+@filter.interesting()
+def handle_response(req):
+    """Only show responses that differ from ALL calibration baselines."""
+    table.add(req)
+```
+</CodeGroup>
+
+**Key concepts:**
+- Multiple learn groups (1-N) for different patterns
+- Each group learns its own baseline
+- Fuzzing phase compared against ALL baselines
+- `@filter.interesting()` only passes responses different from all groups
+
+**Use cases:**
+- Complex applications with multiple error states
+- Differentiate 404 vs 403 vs 500 patterns
+- Bypass WAF false positives
+- Multi-tenant applications
+
+---
+
+## 8. Batch Processing with Delays
+
+Process large wordlists in batches to avoid overwhelming target.
+
+<CodeGroup>
+```python 008_batch_processing_delays.py
+"""
+Batch Processing with Delays
+
+Process large wordlists in batches to avoid overwhelming target.
+Example: Process 10,000 URLs in batches of 100 with 1-second delays
+"""
+
+def queue_tasks():
+    """Process wordlist in batches."""
+    base_url = "https://example.com/"
+    all_paths = payloads.wordlist(1)
+
+    # Process in batches of 100
+    batch_size = 100
+    for batch in utils.chunked(all_paths, batch_size):
+        # Queue batch
+        for path in batch:
+            fuzz.url(base_url + path).queue()
+
+        # Wait between batches (1 second)
+        utils.sleep(1000)
+
+        # Log progress
+        session.increment("batches_processed")
+
+    fuzz.done()
+
+
+@filter.status([200, 301, 302])
+def handle_response(req):
+    """Add successful/redirect responses."""
+    table.add(req)
+
+
+def onStop():
+    """Log final statistics."""
+    batches = session.get("batches_processed", 0)
+    print_log("Processed {} batches".format(batches))
+    session.clear()
+```
+</CodeGroup>
+
+**Key concepts:**
+- `utils.chunked()` splits wordlist into batches
+- `utils.sleep()` adds delays between batches
+- `session.increment()` tracks progress
+- `onStop()` logs final statistics
+
+**Use cases:**
+- Rate limiting compliance
+- Stealth scanning
+- Resource-constrained targets
+- Large wordlist processing
+
+---
+
+## 9. State Machine Workflow
+
+Multi-step workflow with state tracking.
+
+<CodeGroup>
+```python 009_state_machine_workflow.py
+"""
+State Machine Workflow
+
+Implement multi-step testing with state tracking.
+Example: Login → Get token → Access protected endpoints → Extract data
+"""
+
+def queue_tasks():
+    """Execute multi-step workflow."""
+    import json
+
+    base_url = "https://example.com"
+
+    # Step 1: Login
+    login_req = utils.http_request_from_url(base_url + "/api/login")
+    login_req = login_req.withMethod("POST")
+    login_req = login_req.withHeader("Content-Type", "application/json")
+    login_req = login_req.withBody('{"username":"test","password":"test"}')
+    resp1 = fuzz.http_request(login_req).send()
+
+    if resp1.status != 200:
+        print_err("Login failed")
+        fuzz.done()
+        return
+
+    # Step 2: Extract token
+    data = json.loads(resp1.body)
+    token = data.get("token")
+    if not token:
+        print_err("No token received")
+        fuzz.done()
+        return
+
+    session.set("auth_token", token)
+    session.set("login_success", True)
+
+    # Step 3: Access protected endpoints
+    for endpoint in payloads.wordlist(1):
+        req = utils.http_request_from_url(base_url + "/api/" + endpoint)
+        req = req.withHeader("Authorization", f"Bearer {token}")
+        fuzz.http_request(req).queue()
+
+    fuzz.done()
+
+
+@filter.status([200])
+def handle_response(req):
+    """Process successful responses."""
+    # Only process if login succeeded
+    if not session.get("login_success", False):
+        return
+
+    table.add(req)
+
+    # Extract sensitive data
+    if "secret" in req.text.lower():
+        session.increment("secrets_found")
+
+
+def onStop():
+    """Log final statistics."""
+    if session.get("login_success", False):
+        secrets = session.get("secrets_found", 0)
+        print_log("Login successful, found {} secrets".format(secrets))
+    else:
+        print_err("Login failed, no endpoints tested")
+
+    session.clear()
+```
+</CodeGroup>
+
+**Key concepts:**
+- `.send()` for sequential steps
+- `session.set()` stores state
+- Conditional fuzzing based on previous responses
+- Error handling with early return
+- Statistics in `onStop()`
+
+**Use cases:**
+- Authentication-required endpoints
+- Multi-step workflows
+- Session-based testing
+- Complex business logic testing
+
+---
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Learn Mode" icon="brain" href="/scripting/learn-mode">
+    Deep dive into automatic filtering
+  </Card>
+  <Card title="API Reference" icon="book" href="/scripting/api-reference">
+    Complete method documentation
+  </Card>
+  <Card title="Template Structure" icon="file-code" href="/scripting/template-structure">
+    Script anatomy and lifecycle
+  </Card>
+  <Card title="Overview" icon="home" href="/scripting">
+    Back to scripting overview
+  </Card>
+</CardGroup>
